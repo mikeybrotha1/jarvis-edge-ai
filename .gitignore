@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+*.log
+.env
+.venv/
+venv/
+models/
+*.hef
+*.mp4
+*.avi
+*.mov
