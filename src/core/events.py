@@ -23,6 +23,7 @@ class EventType(str, Enum):
     FRAME_PROCESSED = "vision.frame_processed"
     OBJECT_DETECTED = "vision.object_detected"
     OBJECT_ENTERED = "vision.object_entered"
+    OBJECT_UPDATED = "vision.object_updated"
     OBJECT_EXITED = "vision.object_exited"
 
     SCREENSHOT_SAVED = "media.screenshot_saved"
