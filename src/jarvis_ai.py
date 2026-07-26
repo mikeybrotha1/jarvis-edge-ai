@@ -85,6 +85,12 @@ def main() -> int:
 
     finally:
         camera.release()
+
+        try:
+            detector.close()
+        except Exception:
+            logger.exception("Failed to close Hailo detector cleanly")
+
         cv2.destroyAllWindows()
         logger.info("Jarvis shutdown complete")
 
