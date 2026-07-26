@@ -9,3 +9,10 @@ models/
 *.mp4
 *.avi
 *.mov
+
+# Jarvis runtime files
+logs/*.log
+screenshots/*.jpg
+screenshots/*.png
+__pycache__/
+*.pyc

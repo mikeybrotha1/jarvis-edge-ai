@@ -1,44 +1,91 @@
-# Jarvis Edge AI
+# 🤖 Jarvis Edge AI
 
-A locally hosted edge-AI platform built on Raspberry Pi 5 and the Raspberry Pi AI HAT+ 2 with the Hailo-10H accelerator.
+![Status](https://img.shields.io/badge/status-active-brightgreen)
+![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%205-red)
+![Accelerator](https://img.shields.io/badge/AI-Hailo--10H-blue)
 
-## Project 1: Real-Time Object Detection
+## Overview
 
-This first project deploys hardware-accelerated computer vision on the Raspberry Pi 5. The system processes video locally and identifies people, vehicles, bags, and other common objects with confidence scores.
+Jarvis Edge AI is a modular local AI assistant built on a Raspberry Pi 5 using the Raspberry Pi AI HAT+ 2 (Hailo-10H AI accelerator).
 
-## Current Status
+The long-term objective is to build a completely local intelligent assistant capable of:
 
-- Raspberry Pi 5 operational
-- Hailo-10H detected over PCIe
-- `hailo1x_pci` kernel driver loaded
-- `/dev/hailo0` available
-- Hailo firmware responding
-- Real-time object detection demo running
+- Computer Vision
+- Voice Interaction
+- TeslaMate Integration
+- Tesla Solar Monitoring
+- Home Automation
+- Seedo Smart Garden Automation
+- Financial Dashboards
+- Local Language Model Integration
+
+---
+
+## Current Features
+
+✅ Real-Time Object Detection
+
+- Person Detection
+- Vehicle Detection
+- Backpack Detection
+- Handbag Detection
+- Traffic Sign Detection
+
+Running entirely on-device using the Hailo-10H AI accelerator.
+
+---
 
 ## Hardware
 
 - Raspberry Pi 5
 - Raspberry Pi AI HAT+ 2
-- Hailo-10H AI accelerator
-- Active cooling
-- Raspberry Pi OS
+- Hailo-10H AI Processor
+- Active Cooling
 
-## Technologies
+---
 
+## Software
+
+- Debian 13
 - Python
 - Linux
+- Git
 - HailoRT
 - Hailo Apps
 - GStreamer
-- Computer vision
-- Edge AI
-- Git
 
-## Planned Enhancements
+---
 
-1. Run inference against a custom video
-2. Add a live camera source
-3. Capture FPS, CPU, memory, and temperature metrics
-4. Save detection events
-5. Add a dashboard
-6. Integrate the vision service into Jarvis
+## Roadmap
+
+### Phase 1
+- [x] Hardware Installation
+- [x] Driver Installation
+- [x] Real-Time Object Detection
+- [ ] Performance Benchmarks
+- [ ] USB Camera Integration
+
+### Phase 2
+
+- [ ] Jarvis Dashboard
+- [ ] Voice Commands
+- [ ] Local Memory
+
+### Phase 3
+
+- [ ] TeslaMate Integration
+- [ ] Tesla Solar Integration
+- [ ] Seedo Integration
+
+### Phase 4
+
+- [ ] Local AI Assistant
+- [ ] Autonomous Task Execution
+
+---
+
+## Author
+
+Michael Inzinna
+
+2026
