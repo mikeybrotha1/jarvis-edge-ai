@@ -16,3 +16,7 @@ screenshots/*.jpg
 screenshots/*.png
 __pycache__/
 *.pyc
+
+# Jarvis runtime data
+data/events/*.jsonl
+!data/events/.gitkeep
