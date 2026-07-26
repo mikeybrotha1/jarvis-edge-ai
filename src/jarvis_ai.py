@@ -12,6 +12,7 @@ from core.events import EventType, JarvisEvent
 from detector import JarvisDetector
 from display import WINDOW_NAME, draw_hud, save_screenshot
 from rendering.tracked_renderer import render_tracked_objects
+from services.identity_history_service import IdentityHistoryService
 from services.memory_service import MemoryService
 from tracked_view import build_tracked_view
 from utils import configure_logging
@@ -29,6 +30,8 @@ def main() -> int:
         max_missed_frames=8,
     )
 
+    identity_history = IdentityHistoryService(event_bus)
+
     camera = KinectCamera(
         device=0,
         width=1280,
@@ -41,6 +44,7 @@ def main() -> int:
     frame_id = 0
     camera_opened = False
     memory_started = False
+    identity_history_started = False
 
     def log_object_entered(event: JarvisEvent) -> None:
         logger.info(
@@ -68,6 +72,9 @@ def main() -> int:
 
     try:
         logger.info("Starting Jarvis Edge AI")
+
+        identity_history.start()
+        identity_history_started = True
 
         memory.start()
         memory_started = True
@@ -207,6 +214,49 @@ def main() -> int:
 
         if memory_started:
             memory.stop()
+
+        if identity_history_started:
+            histories = identity_history.all_histories()
+
+            if histories:
+                label_counts: dict[str, int] = {}
+
+                for record in histories:
+                    label = record["label"]
+                    label_counts[label] = (
+                        label_counts.get(label, 0) + 1
+                    )
+
+                counts_summary = ", ".join(
+                    f"{count} {label}"
+                    for label, count in sorted(
+                        label_counts.items()
+                    )
+                )
+
+                longest_observed = max(
+                    histories,
+                    key=lambda record: record[
+                        "total_frames_seen"
+                    ],
+                )
+
+                logger.info(
+                    "Identity history: %d identities (%s)",
+                    len(histories),
+                    counts_summary,
+                )
+                logger.info(
+                    "Longest observed: %s, %d frames",
+                    longest_observed["identity"],
+                    longest_observed["total_frames_seen"],
+                )
+            else:
+                logger.info(
+                    "Identity history: no identities observed"
+                )
+
+            identity_history.stop()
 
         event_bus.publish(
             JarvisEvent.create(
