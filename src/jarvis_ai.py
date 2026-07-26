@@ -11,7 +11,9 @@ from core.event_bus import EventBus
 from core.events import EventType, JarvisEvent
 from detector import JarvisDetector
 from display import WINDOW_NAME, draw_hud, save_screenshot
+from rendering.tracked_renderer import render_tracked_objects
 from services.memory_service import MemoryService
+from tracked_view import build_tracked_view
 from utils import configure_logging
 from vision_events import publish_frame_processed
 
@@ -97,8 +99,9 @@ def main() -> int:
         smoothed_fps = 0.0
 
         while True:
-            frame = camera.read()
-            frame, detections = detector.detect(frame)
+            raw_frame = camera.read()
+            _, detections = detector.detect(raw_frame)
+            frame = raw_frame.copy()
             frame_id += 1
 
             current_time = time.perf_counter()
@@ -125,6 +128,15 @@ def main() -> int:
                 frame_id=frame_id,
                 source="azure_kinect",
                 fps=smoothed_fps,
+            )
+
+            tracked_objects = build_tracked_view(
+                memory.active_objects()
+            )
+
+            frame = render_tracked_objects(
+                frame,
+                tracked_objects,
             )
 
             frame = draw_hud(
