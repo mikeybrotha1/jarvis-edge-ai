@@ -2,45 +2,83 @@
 
 from __future__ import annotations
 
+import logging
 import time
 
 import cv2
 
 from camera import KinectCamera
+from config import load_app_config
 from core.event_bus import EventBus
 from core.events import EventType, JarvisEvent
 from detector import JarvisDetector
 from display import WINDOW_NAME, draw_hud, save_screenshot
 from rendering.tracked_renderer import render_tracked_objects
+from services.identity_history_service import IdentityHistoryService
 from services.memory_service import MemoryService
+from services.vision_persistence_service import (
+    VisionPersistenceService,
+)
+from storage.config import DatabaseSettings
+from storage.database import Database
+from storage.repository import VisionRepository
 from tracked_view import build_tracked_view
 from utils import configure_logging
 from vision_events import publish_frame_processed
 
 
 def main() -> int:
-    logger = configure_logging()
+    # Validate configuration before camera or Hailo startup.
+    app_config = load_app_config()
+
+    logger = configure_logging(app_config.logging.log_file)
+    logger.setLevel(getattr(logging, app_config.logging.level))
 
     event_bus = EventBus()
     memory = MemoryService(
         event_bus,
-        source="vision_memory",
-        iou_threshold=0.30,
-        max_missed_frames=8,
+        source=app_config.memory.source,
+        iou_threshold=app_config.memory.iou_threshold,
+        max_missed_frames=app_config.memory.max_missed_frames,
+    )
+
+    identity_history = IdentityHistoryService(event_bus)
+
+    database_settings = DatabaseSettings(
+        database_url=app_config.database.url,
+    )
+    database = Database(database_settings)
+    vision_repository = VisionRepository(database)
+
+    vision_persistence = VisionPersistenceService(
+        event_bus,
+        vision_repository,
+        camera_source=app_config.camera.source_name,
+        metadata={
+            "platform": app_config.runtime.platform,
+            "application": app_config.runtime.application,
+        },
+        logger=logger,
     )
 
     camera = KinectCamera(
-        device=0,
-        width=1280,
-        height=720,
-        fps=30,
+        device=app_config.camera.device,
+        width=app_config.camera.width,
+        height=app_config.camera.height,
+        fps=app_config.camera.fps,
     )
 
-    detector = JarvisDetector()
+    detector = JarvisDetector(
+        model_path=app_config.detector.model_path,
+        confidence_threshold=app_config.detector.confidence_threshold,
+        timeout_seconds=app_config.detector.timeout_seconds,
+    )
 
     frame_id = 0
     camera_opened = False
     memory_started = False
+    identity_history_started = False
+    vision_persistence_started = False
 
     def log_object_entered(event: JarvisEvent) -> None:
         logger.info(
@@ -68,6 +106,17 @@ def main() -> int:
 
     try:
         logger.info("Starting Jarvis Edge AI")
+
+        run_id = vision_persistence.start()
+        vision_persistence_started = True
+
+        logger.info(
+            "Created persistent vision run: %s",
+            run_id,
+        )
+
+        identity_history.start()
+        identity_history_started = True
 
         memory.start()
         memory_started = True
@@ -207,6 +256,52 @@ def main() -> int:
 
         if memory_started:
             memory.stop()
+
+        if vision_persistence_started:
+            vision_persistence.stop()
+
+        if identity_history_started:
+            histories = identity_history.all_histories()
+
+            if histories:
+                label_counts: dict[str, int] = {}
+
+                for record in histories:
+                    label = record["label"]
+                    label_counts[label] = (
+                        label_counts.get(label, 0) + 1
+                    )
+
+                counts_summary = ", ".join(
+                    f"{count} {label}"
+                    for label, count in sorted(
+                        label_counts.items()
+                    )
+                )
+
+                longest_observed = max(
+                    histories,
+                    key=lambda record: record[
+                        "total_frames_seen"
+                    ],
+                )
+
+                logger.info(
+                    "Identity history: %d identities (%s)",
+                    len(histories),
+                    counts_summary,
+                )
+                logger.info(
+                    "Longest observed: %s, %d frames",
+                    longest_observed["identity"],
+                    longest_observed["total_frames_seen"],
+                )
+            else:
+                logger.info(
+                    "Identity history: no identities observed"
+                )
+
+            identity_history.stop()
 
         event_bus.publish(
             JarvisEvent.create(

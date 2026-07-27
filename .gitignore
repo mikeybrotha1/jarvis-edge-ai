@@ -20,3 +20,4 @@ __pycache__/
 # Jarvis runtime data
 data/events/*.jsonl
 !data/events/.gitkeep
+.env.jarvis
