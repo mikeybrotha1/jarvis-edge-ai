@@ -14,6 +14,12 @@ from display import WINDOW_NAME, draw_hud, save_screenshot
 from rendering.tracked_renderer import render_tracked_objects
 from services.identity_history_service import IdentityHistoryService
 from services.memory_service import MemoryService
+from services.vision_persistence_service import (
+    VisionPersistenceService,
+)
+from storage.config import load_database_settings
+from storage.database import Database
+from storage.repository import VisionRepository
 from tracked_view import build_tracked_view
 from utils import configure_logging
 from vision_events import publish_frame_processed
@@ -32,6 +38,21 @@ def main() -> int:
 
     identity_history = IdentityHistoryService(event_bus)
 
+    database_settings = load_database_settings()
+    database = Database(database_settings)
+    vision_repository = VisionRepository(database)
+
+    vision_persistence = VisionPersistenceService(
+        event_bus,
+        vision_repository,
+        camera_source="azure_kinect",
+        metadata={
+            "platform": "raspberry_pi_5",
+            "application": "jarvis-edge-ai",
+        },
+        logger=logger,
+    )
+
     camera = KinectCamera(
         device=0,
         width=1280,
@@ -45,6 +66,7 @@ def main() -> int:
     camera_opened = False
     memory_started = False
     identity_history_started = False
+    vision_persistence_started = False
 
     def log_object_entered(event: JarvisEvent) -> None:
         logger.info(
@@ -72,6 +94,14 @@ def main() -> int:
 
     try:
         logger.info("Starting Jarvis Edge AI")
+
+        run_id = vision_persistence.start()
+        vision_persistence_started = True
+
+        logger.info(
+            "Created persistent vision run: %s",
+            run_id,
+        )
 
         identity_history.start()
         identity_history_started = True
@@ -214,6 +244,9 @@ def main() -> int:
 
         if memory_started:
             memory.stop()
+
+        if vision_persistence_started:
+            vision_persistence.stop()
 
         if identity_history_started:
             histories = identity_history.all_histories()
