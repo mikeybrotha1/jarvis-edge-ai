@@ -1,0 +1,41 @@
+# Jarvis Edge AI — example application configuration
+#
+# Copy to config/jarvis.yaml and adjust as needed:
+#   cp config/jarvis.example.yaml config/jarvis.yaml
+#
+# Precedence (highest wins):
+#   1. Environment variables (JARVIS_*)
+#   2. This YAML file
+#   3. Built-in defaults
+#
+# Secrets: prefer JARVIS_DATABASE_URL over putting credentials in YAML.
+# See docs/configuration.md for the full environment variable list.
+
+database:
+  # Required unless JARVIS_DATABASE_URL is set.
+  url: postgresql://jarvis_app:replace_me@127.0.0.1:5432/jarvis_vision
+
+camera:
+  device: 0
+  width: 1280
+  height: 720
+  fps: 30
+  source_name: azure_kinect
+
+detector:
+  model_path: /usr/local/hailo/resources/models/hailo10h/yolov6n.hef
+  confidence_threshold: 0.40
+  timeout_seconds: 10.0
+
+memory:
+  source: vision_memory
+  iou_threshold: 0.30
+  max_missed_frames: 8
+
+logging:
+  level: INFO
+  log_file: logs/jarvis.log
+
+runtime:
+  platform: raspberry_pi_5
+  application: jarvis-edge-ai
