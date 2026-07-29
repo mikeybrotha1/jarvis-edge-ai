@@ -38,6 +38,12 @@ class AppConfigTests(unittest.TestCase):
         self.assertEqual(cfg.memory.source, "vision_memory")
         self.assertEqual(cfg.memory.iou_threshold, 0.30)
         self.assertEqual(cfg.memory.max_missed_frames, 8)
+        self.assertEqual(cfg.entity_memory.identity_strategy, "tracker_id")
+        self.assertEqual(
+            cfg.entity_memory.snapshot_min_interval_seconds,
+            0.0,
+        )
+        self.assertTrue(cfg.entity_memory.snapshot_on_update)
         self.assertEqual(cfg.logging.level, "INFO")
         self.assertEqual(cfg.logging.log_file, "logs/jarvis.log")
         self.assertEqual(cfg.runtime.platform, "raspberry_pi_5")

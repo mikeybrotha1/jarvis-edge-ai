@@ -21,6 +21,7 @@ from config.models import (
     CameraConfig,
     DatabaseConfig,
     DetectorConfig,
+    EntityMemoryConfig,
     LoggingConfig,
     MemoryConfig,
     RuntimeConfig,
@@ -48,9 +49,18 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
     "memory": frozenset(
         {"source", "iou_threshold", "max_missed_frames"}
     ),
+    "entity_memory": frozenset(
+        {
+            "identity_strategy",
+            "snapshot_min_interval_seconds",
+            "snapshot_on_update",
+        }
+    ),
     "logging": frozenset({"level", "log_file"}),
     "runtime": frozenset({"platform", "application"}),
 }
+
+_VALID_IDENTITY_STRATEGIES = frozenset({"tracker_id"})
 
 _KNOWN_SECTIONS = frozenset(_SECTION_FIELDS)
 
@@ -134,6 +144,17 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "source": defaults.memory.source,
             "iou_threshold": defaults.memory.iou_threshold,
             "max_missed_frames": defaults.memory.max_missed_frames,
+        },
+        "entity_memory": {
+            "identity_strategy": (
+                defaults.entity_memory.identity_strategy
+            ),
+            "snapshot_min_interval_seconds": (
+                defaults.entity_memory.snapshot_min_interval_seconds
+            ),
+            "snapshot_on_update": (
+                defaults.entity_memory.snapshot_on_update
+            ),
         },
         "logging": {
             "level": defaults.logging.level,
@@ -323,6 +344,27 @@ def _apply_env_overrides(
     )
     _set_env_string(
         values,
+        "entity_memory",
+        "identity_strategy",
+        environ,
+        "JARVIS_ENTITY_MEMORY_IDENTITY_STRATEGY",
+    )
+    _set_env_float(
+        values,
+        "entity_memory",
+        "snapshot_min_interval_seconds",
+        environ,
+        "JARVIS_ENTITY_MEMORY_SNAPSHOT_MIN_INTERVAL_SECONDS",
+    )
+    _set_env_bool(
+        values,
+        "entity_memory",
+        "snapshot_on_update",
+        environ,
+        "JARVIS_ENTITY_MEMORY_SNAPSHOT_ON_UPDATE",
+    )
+    _set_env_string(
+        values,
         "logging",
         "level",
         environ,
@@ -399,6 +441,28 @@ def _set_env_float(
         ) from error
 
 
+def _set_env_bool(
+    values: dict[str, dict[str, Any]],
+    section: str,
+    field: str,
+    environ: Mapping[str, str],
+    env_name: str,
+) -> None:
+    if env_name not in environ:
+        return
+    raw = environ[env_name].strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        values[section][field] = True
+        return
+    if raw in {"0", "false", "no", "off"}:
+        values[section][field] = False
+        return
+    raise ConfigurationError(
+        f"Invalid boolean for {env_name}: {environ[env_name]!r}. "
+        "Use true/false, yes/no, on/off, or 1/0."
+    )
+
+
 def _validate(values: dict[str, dict[str, Any]]) -> None:
     errors: list[str] = []
 
@@ -458,6 +522,36 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
     if not _is_int(max_missed) or int(max_missed) < 0:
         errors.append(
             "memory.max_missed_frames must be an integer >= 0."
+        )
+
+    identity_strategy = values["entity_memory"]["identity_strategy"]
+    if (
+        not isinstance(identity_strategy, str)
+        or not identity_strategy.strip()
+    ):
+        errors.append(
+            "entity_memory.identity_strategy must be a non-empty string."
+        )
+    elif identity_strategy.strip().lower() not in _VALID_IDENTITY_STRATEGIES:
+        errors.append(
+            "entity_memory.identity_strategy must be one of: "
+            + ", ".join(sorted(_VALID_IDENTITY_STRATEGIES))
+            + f". Got {identity_strategy!r}."
+        )
+
+    snapshot_interval = values["entity_memory"][
+        "snapshot_min_interval_seconds"
+    ]
+    if not _is_number(snapshot_interval) or float(snapshot_interval) < 0:
+        errors.append(
+            "entity_memory.snapshot_min_interval_seconds must be "
+            "a number >= 0."
+        )
+
+    snapshot_on_update = values["entity_memory"]["snapshot_on_update"]
+    if not isinstance(snapshot_on_update, bool):
+        errors.append(
+            "entity_memory.snapshot_on_update must be a boolean."
         )
 
     level = values["logging"]["level"]
@@ -526,6 +620,19 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             iou_threshold=float(values["memory"]["iou_threshold"]),
             max_missed_frames=int(
                 values["memory"]["max_missed_frames"]
+            ),
+        ),
+        entity_memory=EntityMemoryConfig(
+            identity_strategy=str(
+                values["entity_memory"]["identity_strategy"]
+            )
+            .strip()
+            .lower(),
+            snapshot_min_interval_seconds=float(
+                values["entity_memory"]["snapshot_min_interval_seconds"]
+            ),
+            snapshot_on_update=bool(
+                values["entity_memory"]["snapshot_on_update"]
             ),
         ),
         logging=LoggingConfig(
