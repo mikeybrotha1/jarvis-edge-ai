@@ -42,6 +42,14 @@ entity_memory:
   # When false, skip intermediate update snapshots (create/close still written).
   snapshot_on_update: true
 
+# Read-only entity query API (v0.4.1)
+api:
+  enabled: false
+  host: 0.0.0.0
+  port: 8080
+  default_limit: 50
+  maximum_limit: 200
+
 logging:
   level: INFO
   log_file: logs/jarvis.log

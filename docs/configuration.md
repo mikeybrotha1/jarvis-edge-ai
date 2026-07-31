@@ -42,6 +42,11 @@ Unknown YAML sections or keys raise a configuration error.
 | `JARVIS_ENTITY_MEMORY_IDENTITY_STRATEGY` | `entity_memory.identity_strategy` |
 | `JARVIS_ENTITY_MEMORY_SNAPSHOT_MIN_INTERVAL_SECONDS` | `entity_memory.snapshot_min_interval_seconds` |
 | `JARVIS_ENTITY_MEMORY_SNAPSHOT_ON_UPDATE` | `entity_memory.snapshot_on_update` |
+| `JARVIS_API_ENABLED` | `api.enabled` |
+| `JARVIS_API_HOST` | `api.host` |
+| `JARVIS_API_PORT` | `api.port` |
+| `JARVIS_API_DEFAULT_LIMIT` | `api.default_limit` |
+| `JARVIS_API_MAXIMUM_LIMIT` | `api.maximum_limit` |
 | `JARVIS_LOG_LEVEL` | `logging.level` |
 | `JARVIS_LOG_FILE` | `logging.log_file` |
 | `JARVIS_RUNTIME_PLATFORM` | `runtime.platform` |
@@ -70,6 +75,7 @@ Scripts that use `load_database_settings()` still read **only**
 | Detector | YOLOv6n HEF under `/usr/local/hailo/...`, confidence `0.40`, timeout `10s` |
 | Memory | source `vision_memory`, IoU `0.30`, max missed frames `8` |
 | Entity memory | strategy `tracker_id`, snapshot interval `0.0` (no throttle), `snapshot_on_update` true |
+| API | disabled, host `0.0.0.0`, port `8080`, default limit `50`, maximum limit `200` |
 | Logging | level `INFO`, file `logs/jarvis.log` |
 | Runtime | platform `raspberry_pi_5`, application `jarvis-edge-ai` |
 

@@ -44,6 +44,11 @@ class AppConfigTests(unittest.TestCase):
             0.0,
         )
         self.assertTrue(cfg.entity_memory.snapshot_on_update)
+        self.assertFalse(cfg.api.enabled)
+        self.assertEqual(cfg.api.host, "0.0.0.0")
+        self.assertEqual(cfg.api.port, 8080)
+        self.assertEqual(cfg.api.default_limit, 50)
+        self.assertEqual(cfg.api.maximum_limit, 200)
         self.assertEqual(cfg.logging.level, "INFO")
         self.assertEqual(cfg.logging.log_file, "logs/jarvis.log")
         self.assertEqual(cfg.runtime.platform, "raspberry_pi_5")

@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 from config.models import (
+    ApiConfig,
     AppConfig,
     CameraConfig,
     DatabaseConfig,
@@ -54,6 +55,15 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "identity_strategy",
             "snapshot_min_interval_seconds",
             "snapshot_on_update",
+        }
+    ),
+    "api": frozenset(
+        {
+            "enabled",
+            "host",
+            "port",
+            "default_limit",
+            "maximum_limit",
         }
     ),
     "logging": frozenset({"level", "log_file"}),
@@ -155,6 +165,13 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "snapshot_on_update": (
                 defaults.entity_memory.snapshot_on_update
             ),
+        },
+        "api": {
+            "enabled": defaults.api.enabled,
+            "host": defaults.api.host,
+            "port": defaults.api.port,
+            "default_limit": defaults.api.default_limit,
+            "maximum_limit": defaults.api.maximum_limit,
         },
         "logging": {
             "level": defaults.logging.level,
@@ -363,6 +380,41 @@ def _apply_env_overrides(
         environ,
         "JARVIS_ENTITY_MEMORY_SNAPSHOT_ON_UPDATE",
     )
+    _set_env_bool(
+        values,
+        "api",
+        "enabled",
+        environ,
+        "JARVIS_API_ENABLED",
+    )
+    _set_env_string(
+        values,
+        "api",
+        "host",
+        environ,
+        "JARVIS_API_HOST",
+    )
+    _set_env_int(
+        values,
+        "api",
+        "port",
+        environ,
+        "JARVIS_API_PORT",
+    )
+    _set_env_int(
+        values,
+        "api",
+        "default_limit",
+        environ,
+        "JARVIS_API_DEFAULT_LIMIT",
+    )
+    _set_env_int(
+        values,
+        "api",
+        "maximum_limit",
+        environ,
+        "JARVIS_API_MAXIMUM_LIMIT",
+    )
     _set_env_string(
         values,
         "logging",
@@ -554,6 +606,33 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "entity_memory.snapshot_on_update must be a boolean."
         )
 
+    api_enabled = values["api"]["enabled"]
+    if not isinstance(api_enabled, bool):
+        errors.append("api.enabled must be a boolean.")
+
+    api_host = values["api"]["host"]
+    if not isinstance(api_host, str) or not api_host.strip():
+        errors.append("api.host must be a non-empty string.")
+
+    api_port = values["api"]["port"]
+    if not _is_int(api_port) or not 1 <= int(api_port) <= 65535:
+        errors.append("api.port must be an integer between 1 and 65535.")
+
+    api_default_limit = values["api"]["default_limit"]
+    if not _is_int(api_default_limit) or int(api_default_limit) < 1:
+        errors.append("api.default_limit must be an integer >= 1.")
+
+    api_maximum_limit = values["api"]["maximum_limit"]
+    if not _is_int(api_maximum_limit) or int(api_maximum_limit) < 1:
+        errors.append("api.maximum_limit must be an integer >= 1.")
+    elif (
+        _is_int(api_default_limit)
+        and int(api_default_limit) > int(api_maximum_limit)
+    ):
+        errors.append(
+            "api.default_limit cannot exceed api.maximum_limit."
+        )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -634,6 +713,13 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             snapshot_on_update=bool(
                 values["entity_memory"]["snapshot_on_update"]
             ),
+        ),
+        api=ApiConfig(
+            enabled=bool(values["api"]["enabled"]),
+            host=str(values["api"]["host"]).strip(),
+            port=int(values["api"]["port"]),
+            default_limit=int(values["api"]["default_limit"]),
+            maximum_limit=int(values["api"]["maximum_limit"]),
         ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),

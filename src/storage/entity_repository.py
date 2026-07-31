@@ -16,14 +16,16 @@ from datetime import datetime
 from typing import Any, TypeVar
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from .entity_orm import Entity, EntitySnapshot, EntityStatus
 from .entity_records import (
     EntityCreate,
+    EntityListFilter,
     EntityRecord,
     EntityUpdate,
+    PageResult,
     SnapshotRecord,
 )
 from .sqlalchemy_db import session_scope
@@ -261,6 +263,107 @@ class EntityRepository:
             ]
 
         return self._with_session(session, _read)
+
+    def list_entities(
+        self,
+        filters: EntityListFilter,
+        *,
+        session: Session | None = None,
+    ) -> PageResult:
+        """List entities with SQL-side filters, sort, limit, and total count."""
+
+        def _read(active: Session) -> PageResult:
+            conditions = self._filter_conditions(filters)
+
+            count_statement = select(func.count()).select_from(Entity)
+            list_statement = select(Entity)
+            for condition in conditions:
+                count_statement = count_statement.where(condition)
+                list_statement = list_statement.where(condition)
+
+            if filters.sort == "asc":
+                list_statement = list_statement.order_by(Entity.last_seen.asc())
+            else:
+                list_statement = list_statement.order_by(
+                    Entity.last_seen.desc()
+                )
+
+            list_statement = list_statement.offset(filters.offset).limit(
+                filters.limit
+            )
+
+            total = int(active.scalar(count_statement) or 0)
+            items = [
+                self._to_entity_record(row)
+                for row in active.scalars(list_statement).all()
+            ]
+            return PageResult(
+                items=items,
+                total=total,
+                limit=filters.limit,
+                offset=filters.offset,
+            )
+
+        return self._with_session(session, _read)
+
+    def list_active(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        sort: str = "desc",
+        session: Session | None = None,
+    ) -> PageResult:
+        """List entities with status active."""
+
+        return self.list_entities(
+            EntityListFilter(
+                status=EntityStatus.ACTIVE,
+                limit=limit,
+                offset=offset,
+                sort=sort,
+            ),
+            session=session,
+        )
+
+    def list_recent(
+        self,
+        *,
+        limit: int = 50,
+        offset: int = 0,
+        session: Session | None = None,
+    ) -> PageResult:
+        """List entities ordered by most recent last_seen first."""
+
+        return self.list_entities(
+            EntityListFilter(
+                limit=limit,
+                offset=offset,
+                sort="desc",
+            ),
+            session=session,
+        )
+
+    @staticmethod
+    def _filter_conditions(filters: EntityListFilter) -> list[Any]:
+        conditions: list[Any] = []
+
+        if filters.status is not None:
+            conditions.append(Entity.status == filters.status)
+
+        if filters.entity_type is not None:
+            conditions.append(Entity.label == filters.entity_type)
+
+        if filters.camera_id is not None:
+            conditions.append(Entity.camera_id == filters.camera_id)
+
+        if filters.seen_after is not None:
+            conditions.append(Entity.last_seen >= filters.seen_after)
+
+        if filters.seen_before is not None:
+            conditions.append(Entity.last_seen <= filters.seen_before)
+
+        return conditions
 
     def _create(self, session: Session, data: EntityCreate) -> EntityRecord:
         self._validate_confidence(data.confidence, field_name="confidence")

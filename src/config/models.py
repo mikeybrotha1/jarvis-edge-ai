@@ -68,6 +68,17 @@ class EntityMemoryConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ApiConfig:
+    """Read-only HTTP entity query API settings (v0.4.1)."""
+
+    enabled: bool = False
+    host: str = "0.0.0.0"
+    port: int = 8080
+    default_limit: int = 50
+    maximum_limit: int = 200
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -94,5 +105,6 @@ class AppConfig:
     entity_memory: EntityMemoryConfig = field(
         default_factory=EntityMemoryConfig
     )
+    api: ApiConfig = field(default_factory=ApiConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)
