@@ -44,6 +44,30 @@ class MemoryConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class EntityMemoryConfig:
+    """Persistent entity memory settings (v0.4.0).
+
+    Placeholders
+    ------------
+    identity_strategy:
+        Matcher used to build opaque identity keys. Default ``tracker_id``
+        scopes keys by camera and tracker ID.
+    snapshot_min_interval_seconds:
+        Minimum seconds between intermediate (update) snapshots for the same
+        entity. ``0.0`` disables throttling (snapshot every lifecycle event).
+        Create and close snapshots are never throttled.
+    snapshot_on_update:
+        When False, intermediate update snapshots are skipped entirely
+        (create/close still recorded). Reserved for future write-reduction;
+        default True preserves full audit history.
+    """
+
+    identity_strategy: str = "tracker_id"
+    snapshot_min_interval_seconds: float = 0.0
+    snapshot_on_update: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -67,5 +91,8 @@ class AppConfig:
     camera: CameraConfig = field(default_factory=CameraConfig)
     detector: DetectorConfig = field(default_factory=DetectorConfig)
     memory: MemoryConfig = field(default_factory=MemoryConfig)
+    entity_memory: EntityMemoryConfig = field(
+        default_factory=EntityMemoryConfig
+    )
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

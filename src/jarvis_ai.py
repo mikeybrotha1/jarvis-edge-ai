@@ -14,6 +14,8 @@ from core.events import EventType, JarvisEvent
 from detector import JarvisDetector
 from display import WINDOW_NAME, draw_hud, save_screenshot
 from rendering.tracked_renderer import render_tracked_objects
+from core.identity import build_identity_matcher
+from services.entity_memory_service import EntityMemoryService
 from services.identity_history_service import IdentityHistoryService
 from services.memory_service import MemoryService
 from services.vision_persistence_service import (
@@ -21,7 +23,13 @@ from services.vision_persistence_service import (
 )
 from storage.config import DatabaseSettings
 from storage.database import Database
+from storage.entity_repository import EntityRepository
+from storage.observation_repository import ObservationRepository
 from storage.repository import VisionRepository
+from storage.sqlalchemy_db import (
+    create_entity_engine,
+    create_session_factory,
+)
 from tracked_view import build_tracked_view
 from utils import configure_logging
 from vision_events import publish_frame_processed
@@ -50,6 +58,13 @@ def main() -> int:
     database = Database(database_settings)
     vision_repository = VisionRepository(database)
 
+    # Entity memory uses SQLAlchemy (Alembic-managed tables) alongside the
+    # existing psycopg VisionRepository stack.
+    entity_engine = create_entity_engine(app_config.database.url)
+    entity_session_factory = create_session_factory(entity_engine)
+    entity_repository = EntityRepository(entity_session_factory)
+    observation_repository = ObservationRepository(entity_session_factory)
+
     vision_persistence = VisionPersistenceService(
         event_bus,
         vision_repository,
@@ -58,6 +73,22 @@ def main() -> int:
             "platform": app_config.runtime.platform,
             "application": app_config.runtime.application,
         },
+        logger=logger,
+    )
+
+    entity_memory = EntityMemoryService(
+        event_bus,
+        entity_repository,
+        observation_repository,
+        session_factory=entity_session_factory,
+        identity_matcher=build_identity_matcher(
+            app_config.entity_memory.identity_strategy
+        ),
+        camera_id=app_config.camera.source_name,
+        snapshot_min_interval_seconds=(
+            app_config.entity_memory.snapshot_min_interval_seconds
+        ),
+        snapshot_on_update=app_config.entity_memory.snapshot_on_update,
         logger=logger,
     )
 
@@ -79,6 +110,7 @@ def main() -> int:
     memory_started = False
     identity_history_started = False
     vision_persistence_started = False
+    entity_memory_started = False
 
     def log_object_entered(event: JarvisEvent) -> None:
         logger.info(
@@ -117,6 +149,9 @@ def main() -> int:
 
         identity_history.start()
         identity_history_started = True
+
+        entity_memory.start()
+        entity_memory_started = True
 
         memory.start()
         memory_started = True
@@ -256,6 +291,9 @@ def main() -> int:
 
         if memory_started:
             memory.stop()
+
+        if entity_memory_started:
+            entity_memory.stop()
 
         if vision_persistence_started:
             vision_persistence.stop()

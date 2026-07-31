@@ -32,6 +32,16 @@ memory:
   iou_threshold: 0.30
   max_missed_frames: 8
 
+# Persistent entity memory (v0.4.0)
+entity_memory:
+  # Identity key strategy. Currently only "tracker_id"
+  # (camera_id + track_id scoped keys).
+  identity_strategy: tracker_id
+  # Minimum seconds between intermediate update snapshots (0 = no throttle).
+  snapshot_min_interval_seconds: 0.0
+  # When false, skip intermediate update snapshots (create/close still written).
+  snapshot_on_update: true
+
 logging:
   level: INFO
   log_file: logs/jarvis.log

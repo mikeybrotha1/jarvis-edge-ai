@@ -26,6 +26,10 @@ class EventType(str, Enum):
     OBJECT_UPDATED = "vision.object_updated"
     OBJECT_EXITED = "vision.object_exited"
 
+    ENTITY_CREATED = "memory.entity_created"
+    ENTITY_UPDATED = "memory.entity_updated"
+    ENTITY_CLOSED = "memory.entity_closed"
+
     SCREENSHOT_SAVED = "media.screenshot_saved"
 
     METRIC_RECORDED = "metrics.recorded"
