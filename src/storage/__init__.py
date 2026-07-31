@@ -2,10 +2,13 @@ from .config import DatabaseSettings, load_database_settings
 from .database import Database
 from .entity_records import (
     EntityCreate,
+    EntityListFilter,
     EntityRecord,
     EntityUpdate,
     ObservationCreate,
+    ObservationListFilter,
     ObservationRecord,
+    PageResult,
     SnapshotRecord,
 )
 from .entity_repository import EntityRepository
@@ -23,14 +26,17 @@ __all__ = [
     "Database",
     "DatabaseSettings",
     "EntityCreate",
+    "EntityListFilter",
     "EntityRecord",
     "EntityRepository",
     "EntityUpdate",
     "IdentityEventRecord",
     "IdentitySessionRecord",
     "ObservationCreate",
+    "ObservationListFilter",
     "ObservationRecord",
     "ObservationRepository",
+    "PageResult",
     "SnapshotRecord",
     "VisionRepository",
     "VisionRunRecord",

@@ -2,6 +2,7 @@
 
 from config.loader import ConfigurationError, load_app_config
 from config.models import (
+    ApiConfig,
     AppConfig,
     CameraConfig,
     DatabaseConfig,
@@ -13,6 +14,7 @@ from config.models import (
 )
 
 __all__ = [
+    "ApiConfig",
     "AppConfig",
     "CameraConfig",
     "ConfigurationError",

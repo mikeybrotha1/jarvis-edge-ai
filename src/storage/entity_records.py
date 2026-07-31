@@ -135,3 +135,39 @@ class EntityUpdate:
     camera_id: str | None = None
     bounding_box: dict[str, Any] | None = None
     reopen: bool = False
+
+
+@dataclass(frozen=True, slots=True)
+class EntityListFilter:
+    """Server-side filters for entity collection queries."""
+
+    status: EntityStatus | None = None
+    entity_type: str | None = None  # maps to Entity.label
+    camera_id: str | None = None
+    seen_after: datetime | None = None
+    seen_before: datetime | None = None
+    limit: int = 50
+    offset: int = 0
+    sort: str = "desc"  # last_seen direction: asc | desc
+
+
+@dataclass(frozen=True, slots=True)
+class ObservationListFilter:
+    """Server-side filters for observation collection queries."""
+
+    entity_id: UUID
+    seen_after: datetime | None = None
+    seen_before: datetime | None = None
+    limit: int = 100
+    offset: int = 0
+    sort: str = "desc"  # observed_at direction: asc | desc
+
+
+@dataclass(frozen=True, slots=True)
+class PageResult:
+    """Paginated collection with total count computed in SQL."""
+
+    items: list[Any]
+    total: int
+    limit: int
+    offset: int

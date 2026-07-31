@@ -14,14 +14,19 @@ from __future__ import annotations
 
 import uuid
 from collections.abc import Callable
-from typing import TypeVar
+from typing import Any, TypeVar
 from uuid import UUID
 
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, sessionmaker
 
 from .entity_orm import EntityObservation
-from .entity_records import ObservationCreate, ObservationRecord
+from .entity_records import (
+    ObservationCreate,
+    ObservationListFilter,
+    ObservationRecord,
+    PageResult,
+)
 from .sqlalchemy_db import session_scope
 
 T = TypeVar("T")
@@ -138,6 +143,70 @@ class ObservationRepository:
             return int(active.scalar(statement) or 0)
 
         return self._with_session(session, _read)
+
+    def list_observations(
+        self,
+        filters: ObservationListFilter,
+        *,
+        session: Session | None = None,
+    ) -> PageResult:
+        """List observations for one entity with SQL filters and pagination."""
+
+        def _read(active: Session) -> PageResult:
+            conditions = self._filter_conditions(filters)
+
+            count_statement = select(func.count()).select_from(
+                EntityObservation
+            )
+            list_statement = select(EntityObservation)
+            for condition in conditions:
+                count_statement = count_statement.where(condition)
+                list_statement = list_statement.where(condition)
+
+            if filters.sort == "asc":
+                list_statement = list_statement.order_by(
+                    EntityObservation.observed_at.asc()
+                )
+            else:
+                list_statement = list_statement.order_by(
+                    EntityObservation.observed_at.desc()
+                )
+
+            list_statement = list_statement.offset(filters.offset).limit(
+                filters.limit
+            )
+
+            total = int(active.scalar(count_statement) or 0)
+            items = [
+                self._to_record(row)
+                for row in active.scalars(list_statement).all()
+            ]
+            return PageResult(
+                items=items,
+                total=total,
+                limit=filters.limit,
+                offset=filters.offset,
+            )
+
+        return self._with_session(session, _read)
+
+    @staticmethod
+    def _filter_conditions(filters: ObservationListFilter) -> list[Any]:
+        conditions: list[Any] = [
+            EntityObservation.entity_id == filters.entity_id,
+        ]
+
+        if filters.seen_after is not None:
+            conditions.append(
+                EntityObservation.observed_at >= filters.seen_after
+            )
+
+        if filters.seen_before is not None:
+            conditions.append(
+                EntityObservation.observed_at <= filters.seen_before
+            )
+
+        return conditions
 
     def _get_by_source_event_id(
         self,
