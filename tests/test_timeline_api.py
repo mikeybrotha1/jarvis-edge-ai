@@ -38,7 +38,11 @@ def _build():
         entities,
         limits=TimelineLimits(),
     )
-    app = create_app(query_service=query, timeline_service=timeline)
+    app = create_app(
+        query_service=query,
+        timeline_service=timeline,
+        enable_activity_stream=False,
+    )
     return TestClient(app), entities, observations
 
 
@@ -203,7 +207,11 @@ def test_database_errors_sanitized() -> None:
         raise RuntimeError("SELECT * FROM secrets WHERE password='x'")
 
     timeline_repo.list_events = boom  # type: ignore[method-assign]
-    app = create_app(query_service=query, timeline_service=timeline)
+    app = create_app(
+        query_service=query,
+        timeline_service=timeline,
+        enable_activity_stream=False,
+    )
     try:
         response = TestClient(app).get("/api/v1/timeline")
         assert response.status_code == 503

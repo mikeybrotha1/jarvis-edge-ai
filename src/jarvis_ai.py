@@ -23,6 +23,7 @@ from services.vision_persistence_service import (
 )
 from storage.config import DatabaseSettings
 from storage.database import Database
+from storage.activity_notify import ActivityNotificationPublisher
 from storage.entity_repository import EntityRepository
 from storage.observation_repository import ObservationRepository
 from storage.repository import VisionRepository
@@ -76,6 +77,19 @@ def main() -> int:
         logger=logger,
     )
 
+    activity_publisher = None
+    if app_config.activity_stream.enabled:
+        activity_publisher = ActivityNotificationPublisher(
+            channel=app_config.activity_stream.notify_channel,
+            observation_notifications_enabled=(
+                app_config.activity_stream.observation_notifications_enabled
+            ),
+            observation_min_interval_seconds=(
+                app_config.activity_stream.observation_min_interval_seconds
+            ),
+            logger=logger,
+        )
+
     entity_memory = EntityMemoryService(
         event_bus,
         entity_repository,
@@ -89,6 +103,7 @@ def main() -> int:
             app_config.entity_memory.snapshot_min_interval_seconds
         ),
         snapshot_on_update=app_config.entity_memory.snapshot_on_update,
+        activity_publisher=activity_publisher,
         logger=logger,
     )
 

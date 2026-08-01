@@ -49,6 +49,15 @@ Unknown YAML sections or keys raise a configuration error.
 | `JARVIS_API_MAXIMUM_LIMIT` | `api.maximum_limit` |
 | `JARVIS_TIMELINE_DEFAULT_LIMIT` | `timeline.default_limit` |
 | `JARVIS_TIMELINE_MAXIMUM_LIMIT` | `timeline.maximum_limit` |
+| `JARVIS_ACTIVITY_STREAM_ENABLED` | `activity_stream.enabled` |
+| `JARVIS_ACTIVITY_STREAM_NOTIFY_CHANNEL` | `activity_stream.notify_channel` |
+| `JARVIS_ACTIVITY_STREAM_OBSERVATION_NOTIFICATIONS_ENABLED` | `activity_stream.observation_notifications_enabled` |
+| `JARVIS_ACTIVITY_STREAM_OBSERVATION_MIN_INTERVAL_SECONDS` | `activity_stream.observation_min_interval_seconds` |
+| `JARVIS_ACTIVITY_STREAM_CLIENT_QUEUE_SIZE` | `activity_stream.client_queue_size` |
+| `JARVIS_ACTIVITY_STREAM_HEARTBEAT_INTERVAL_SECONDS` | `activity_stream.heartbeat_interval_seconds` |
+| `JARVIS_ACTIVITY_STREAM_MAX_CONNECTIONS` | `activity_stream.max_connections` |
+| `JARVIS_ACTIVITY_STREAM_RECONNECT_INITIAL_SECONDS` | `activity_stream.reconnect_initial_seconds` |
+| `JARVIS_ACTIVITY_STREAM_RECONNECT_MAX_SECONDS` | `activity_stream.reconnect_max_seconds` |
 | `JARVIS_LOG_LEVEL` | `logging.level` |
 | `JARVIS_LOG_FILE` | `logging.log_file` |
 | `JARVIS_RUNTIME_PLATFORM` | `runtime.platform` |
@@ -79,6 +88,7 @@ Scripts that use `load_database_settings()` still read **only**
 | Entity memory | strategy `tracker_id`, snapshot interval `0.0` (no throttle), `snapshot_on_update` true |
 | API | disabled, host `0.0.0.0`, port `8080`, default limit `50`, maximum limit `200` |
 | Timeline | default limit `50`, maximum limit `200` |
+| Activity stream | enabled, channel `jarvis_activity`, observations off, throttle `1.0s`, queue `100`, max connections `25` |
 | Logging | level `INFO`, file `logs/jarvis.log` |
 | Runtime | platform `raspberry_pi_5`, application `jarvis-edge-ai` |
 
