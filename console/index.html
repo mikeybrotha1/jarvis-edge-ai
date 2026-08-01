@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark light" />
+  <title>Jarvis Live Activity Console</title>
+  <link rel="stylesheet" href="/console/css/console.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main-feed">Skip to activity feed</a>
+
+  <header class="top-bar" role="banner">
+    <div class="brand">
+      <h1>Jarvis Live Activity</h1>
+      <p class="subtitle">v0.5.1 console · REST + WebSocket</p>
+    </div>
+    <div
+      id="status-bar"
+      class="status-bar"
+      role="status"
+      aria-live="polite"
+      aria-atomic="true"
+    >
+      <div class="status-item" data-status="ws">
+        <span class="status-icon" aria-hidden="true">●</span>
+        <span class="status-label">WebSocket</span>
+        <span class="status-value" id="status-ws">disconnected</span>
+      </div>
+      <div class="status-item" data-status="stream">
+        <span class="status-icon" aria-hidden="true">●</span>
+        <span class="status-label">Stream</span>
+        <span class="status-value" id="status-stream">unknown</span>
+      </div>
+      <div class="status-item" data-status="last-event">
+        <span class="status-label">Last event</span>
+        <span class="status-value" id="status-last-event">—</span>
+      </div>
+      <div class="status-item" data-status="reconnect">
+        <span class="status-label">Reconnect</span>
+        <span class="status-value" id="status-reconnect">idle · 0</span>
+      </div>
+      <div class="status-item" data-status="observations">
+        <span class="status-label">Observations</span>
+        <span class="status-value" id="status-observations">off</span>
+      </div>
+      <div class="status-item" data-status="mode">
+        <span class="status-label">Mode</span>
+        <span class="status-value" id="status-mode">loading</span>
+      </div>
+    </div>
+  </header>
+
+  <div class="layout">
+    <aside class="filters-panel" aria-labelledby="filters-heading">
+      <h2 id="filters-heading">Filters</h2>
+      <form id="filters-form" class="filters-form">
+        <fieldset>
+          <legend>Event types</legend>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="entity_created" checked />
+            <span>entity_created</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="entity_closed" checked />
+            <span>entity_closed</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="observation_recorded" />
+            <span>observation_recorded (opt-in)</span>
+          </label>
+        </fieldset>
+
+        <label class="field">
+          <span>Camera ID</span>
+          <input type="text" id="filter-camera" name="camera_id" autocomplete="off" placeholder="optional" />
+        </label>
+        <label class="field">
+          <span>Entity type</span>
+          <input type="text" id="filter-entity-type" name="entity_type" autocomplete="off" placeholder="person, car, …" />
+        </label>
+        <label class="field">
+          <span>Entity ID</span>
+          <input type="text" id="filter-entity-id" name="entity_id" autocomplete="off" placeholder="UUID optional" />
+        </label>
+
+        <div class="filter-actions">
+          <button type="submit" id="btn-apply-filters">Apply filters</button>
+          <button type="button" id="btn-clear-filters" class="secondary">Clear</button>
+        </div>
+      </form>
+
+      <p id="filter-hint" class="hint">
+        Lifecycle events load by default. Observations require opt-in above and a matching WebSocket subscription.
+      </p>
+      <div id="warning-banner" class="warning-banner" role="alert" hidden></div>
+    </aside>
+
+    <main id="main-feed" class="feed-panel" tabindex="-1">
+      <div class="feed-header">
+        <h2>Activity feed</h2>
+        <div class="feed-meta">
+          <span id="feed-count">0 events</span>
+          <button type="button" id="btn-load-older" class="secondary" disabled>
+            Load older
+          </button>
+        </div>
+      </div>
+      <p id="feed-state" class="feed-state" role="status" aria-live="polite">
+        Loading history…
+      </p>
+      <ul
+        id="event-list"
+        class="event-list"
+        role="listbox"
+        aria-label="Activity events"
+        aria-activedescendant=""
+        tabindex="0"
+      ></ul>
+      <p id="history-end" class="history-end" hidden>End of available history for these filters.</p>
+    </main>
+
+    <aside class="entity-panel" aria-labelledby="entities-heading">
+      <h2 id="entities-heading">Entities</h2>
+
+      <section aria-labelledby="active-entities-heading">
+        <h3 id="active-entities-heading">Active</h3>
+        <ul id="active-entities" class="entity-list" role="list"></ul>
+      </section>
+
+      <section aria-labelledby="recent-entities-heading">
+        <h3 id="recent-entities-heading">Recent</h3>
+        <ul id="recent-entities" class="entity-list" role="list"></ul>
+      </section>
+
+      <section class="entity-detail" aria-labelledby="entity-detail-heading">
+        <h3 id="entity-detail-heading">Selected entity</h3>
+        <dl id="entity-detail" class="entity-detail-dl">
+          <div><dt>ID</dt><dd data-field="id">—</dd></div>
+          <div><dt>Type</dt><dd data-field="entity_type">—</dd></div>
+          <div><dt>Label</dt><dd data-field="label">—</dd></div>
+          <div><dt>Status</dt><dd data-field="status">—</dd></div>
+          <div><dt>Camera</dt><dd data-field="camera_id">—</dd></div>
+          <div><dt>First seen</dt><dd data-field="first_seen">—</dd></div>
+          <div><dt>Last seen</dt><dd data-field="last_seen">—</dd></div>
+          <div><dt>Confidence</dt><dd data-field="average_confidence">—</dd></div>
+          <div><dt>Times seen</dt><dd data-field="times_seen">—</dd></div>
+        </dl>
+        <p id="entity-detail-empty" class="hint">Select an event or entity to inspect.</p>
+      </section>
+    </aside>
+  </div>
+
+  <script type="module" src="/console/js/main.js"></script>
+</body>
+</html>

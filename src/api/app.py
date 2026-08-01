@@ -8,11 +8,13 @@ from __future__ import annotations
 
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Any
 
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
+from fastapi.responses import FileResponse, JSONResponse
+from fastapi.staticfiles import StaticFiles
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
@@ -226,6 +228,8 @@ def create_app(
     app.include_router(timeline_router)
     app.include_router(activity_ws_router)
 
+    _mount_live_activity_console(app)
+
     @app.get("/health", response_model=HealthOut, tags=["system"])
     def health() -> HealthOut:
         return HealthOut()
@@ -277,6 +281,42 @@ def _safe_validation_detail(errors: list[Any]) -> list[dict[str, Any]]:
             }
         )
     return cleaned
+
+
+def _console_directory() -> Path:
+    """Repository-root ``console/`` directory (sibling of ``src/``)."""
+
+    return Path(__file__).resolve().parents[2] / "console"
+
+
+def _mount_live_activity_console(app: FastAPI) -> None:
+    """Serve the static Live Activity Console at ``/console``.
+
+    Registered after API routers so ``/api/v1/*``, ``/ws/v1/*``, ``/health``,
+    and OpenAPI routes remain authoritative.
+    """
+
+    console_dir = _console_directory()
+    index = console_dir / "index.html"
+    if not console_dir.is_dir() or not index.is_file():
+        logger.warning(
+            "Live Activity Console assets not found at %s",
+            console_dir,
+        )
+        return
+
+    @app.get("/console", include_in_schema=False)
+    @app.get("/console/", include_in_schema=False)
+    async def live_activity_console_index() -> FileResponse:
+        return FileResponse(index, media_type="text/html; charset=utf-8")
+
+    # Assets: /console/css/*, /console/js/*
+    app.mount(
+        "/console",
+        StaticFiles(directory=str(console_dir), html=False),
+        name="live_activity_console",
+    )
+    logger.info("Live Activity Console mounted at /console (%s)", console_dir)
 
 
 def build_app_from_loaded_config(
