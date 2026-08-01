@@ -1,13 +1,13 @@
-# Live Activity Console (v0.5.1)
+# Live Activity Console (v0.5.1 + spatial v0.6.0)
 
-Browser UI for Jarvis entity activity history and live stream.
+Browser UI for Jarvis entity activity history, live stream, and zones.
 
 **URL:** [http://127.0.0.1:8080/console](http://127.0.0.1:8080/console)
 
 ## What it is
 
 A same-origin static console (HTML/CSS/vanilla JS, no build step) that consumes
-only public APIs already shipped in v0.4.1–v0.5.0:
+public APIs:
 
 | Interface | Role in console |
 |-----------|-----------------|
@@ -16,9 +16,10 @@ only public APIs already shipped in v0.4.1–v0.5.0:
 | `GET /api/v1/entities/active` | Active entities panel |
 | `GET /api/v1/entities/recent` | Recent entities panel |
 | `GET /api/v1/entities/{id}` | Selected entity detail |
-| `WS /ws/v1/activity` | Live timeline events |
+| `GET/POST/PATCH /api/v1/zones…` | Zone list, occupancy, sessions, create/update |
+| `WS /ws/v1/activity` | Live timeline + spatial events |
 
-No new backend domain endpoints or database tables.
+Zero build step: no Node.js, no frameworks, no live video, no canvas drawing.
 
 ## Startup
 

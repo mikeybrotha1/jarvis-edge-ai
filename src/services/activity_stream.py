@@ -21,13 +21,19 @@ DEFAULT_LIFECYCLE_TYPES: frozenset[str] = frozenset(
     {
         TimelineEventType.ENTITY_CREATED.value,
         TimelineEventType.ENTITY_CLOSED.value,
+        TimelineEventType.ZONE_ENTERED.value,
+        TimelineEventType.ZONE_EXITED.value,
+        TimelineEventType.ZONE_OCCUPANCY_CHANGED.value,
     }
 )
 
 
 @dataclass
 class ActivitySubscription:
-    """Per-client subscription filters."""
+    """Per-client subscription filters.
+
+    Filtering is AND across categories and OR within a category.
+    """
 
     event_types: set[str] = field(
         default_factory=lambda: set(DEFAULT_LIFECYCLE_TYPES)
@@ -35,6 +41,7 @@ class ActivitySubscription:
     camera_ids: set[str] = field(default_factory=set)
     entity_ids: set[UUID] = field(default_factory=set)
     entity_types: set[str] = field(default_factory=set)
+    zone_ids: set[UUID] = field(default_factory=set)
 
     def matches(self, event: TimelineEvent) -> bool:
         if event.event_type.value not in self.event_types:
@@ -46,6 +53,16 @@ class ActivitySubscription:
             return False
         if self.entity_types and event.entity_type not in self.entity_types:
             return False
+        if self.zone_ids:
+            zone_raw = event.payload.get("zone_id")
+            if zone_raw is None:
+                return False
+            try:
+                zone_id = UUID(str(zone_raw))
+            except ValueError:
+                return False
+            if zone_id not in self.zone_ids:
+                return False
         return True
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -54,6 +71,7 @@ class ActivitySubscription:
             "camera_ids": sorted(self.camera_ids),
             "entity_ids": [str(item) for item in sorted(self.entity_ids, key=str)],
             "entity_types": sorted(self.entity_types),
+            "zone_ids": [str(item) for item in sorted(self.zone_ids, key=str)],
         }
 
 

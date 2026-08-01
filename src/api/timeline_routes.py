@@ -66,13 +66,15 @@ def list_timeline(
         Query(
             description=(
                 "Event types to include. Default: entity_created, "
-                "entity_closed. Repeat to pass multiple values. "
+                "entity_closed, zone_entered, zone_exited, "
+                "zone_occupancy_changed. Repeat to pass multiple values. "
                 "Include observation_recorded to project observations."
             ),
         ),
     ] = None,
     camera_id: Annotated[str | None, Query()] = None,
     entity_type: Annotated[str | None, Query()] = None,
+    zone_id: Annotated[UUID | None, Query()] = None,
     limit: Annotated[int | None, Query(ge=1)] = None,
     cursor: Annotated[str | None, Query()] = None,
     sort: Annotated[str, Query(description="asc or desc")] = "desc",
@@ -85,6 +87,7 @@ def list_timeline(
             event_type=event_type,
             camera_id=camera_id,
             entity_type=entity_type,
+            zone_id=zone_id,
             limit=limit,
             cursor=cursor,
             sort=sort,

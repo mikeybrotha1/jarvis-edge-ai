@@ -102,6 +102,20 @@ class ActivityStreamConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class SpatialConfig:
+    """Spatial intelligence / zone matching settings (v0.6.0)."""
+
+    enabled: bool = True
+    position_strategy: str = "bottom_center"
+    enter_confirm_observations: int = 3
+    exit_confirm_observations: int = 3
+    lost_track_timeout_seconds: float = 15.0
+    maximum_zones_per_camera: int = 10
+    occupancy_stale_seconds: float = 60.0
+    publish_occupancy_changes: bool = True
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -133,5 +147,6 @@ class AppConfig:
     activity_stream: ActivityStreamConfig = field(
         default_factory=ActivityStreamConfig
     )
+    spatial: SpatialConfig = field(default_factory=SpatialConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

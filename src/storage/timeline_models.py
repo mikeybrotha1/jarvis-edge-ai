@@ -15,15 +15,29 @@ class TimelineEventType(str, Enum):
     ENTITY_CREATED = "entity_created"
     ENTITY_CLOSED = "entity_closed"
     OBSERVATION_RECORDED = "observation_recorded"
+    ZONE_ENTERED = "zone_entered"
+    ZONE_EXITED = "zone_exited"
+    ZONE_OCCUPANCY_CHANGED = "zone_occupancy_changed"
 
 
 DEFAULT_TIMELINE_EVENT_TYPES: tuple[TimelineEventType, ...] = (
     TimelineEventType.ENTITY_CREATED,
     TimelineEventType.ENTITY_CLOSED,
+    TimelineEventType.ZONE_ENTERED,
+    TimelineEventType.ZONE_EXITED,
+    TimelineEventType.ZONE_OCCUPANCY_CHANGED,
 )
 
 ALL_TIMELINE_EVENT_TYPES: frozenset[str] = frozenset(
     item.value for item in TimelineEventType
+)
+
+SPATIAL_TIMELINE_EVENT_TYPES: frozenset[str] = frozenset(
+    {
+        TimelineEventType.ZONE_ENTERED.value,
+        TimelineEventType.ZONE_EXITED.value,
+        TimelineEventType.ZONE_OCCUPANCY_CHANGED.value,
+    }
 )
 
 
@@ -60,6 +74,7 @@ class TimelineListFilter:
     entity_id: UUID | None = None
     camera_id: str | None = None
     entity_type: str | None = None
+    zone_id: UUID | None = None
     limit: int = 50
     cursor: TimelineCursor | None = None
     sort: str = "desc"

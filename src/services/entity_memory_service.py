@@ -75,6 +75,7 @@ class EntityMemoryService:
         snapshot_min_interval_seconds: float = 0.0,
         snapshot_on_update: bool = True,
         activity_publisher: ActivityNotificationPublisher | None = None,
+        spatial_service: Any | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         if snapshot_min_interval_seconds < 0:
@@ -98,6 +99,7 @@ class EntityMemoryService:
         )
         self._snapshot_on_update = bool(snapshot_on_update)
         self._activity_publisher = activity_publisher
+        self._spatial_service = spatial_service
         self._logger = logger or logging.getLogger(__name__)
 
         # Last intermediate snapshot time per entity (throttling).
@@ -521,6 +523,27 @@ class EntityMemoryService:
                     entity_id=entity.id,
                     occurred_at=obs_record.observed_at,
                 )
+
+        # Spatial matching in the same transaction (after entity/observation).
+        if session is not None and self._spatial_service is not None:
+            try:
+                self._spatial_service.process_observation(
+                    entity_id=entity.id,
+                    camera_id=str(observation["camera_id"]),
+                    label=str(observation["label"]),
+                    confidence=float(observation["confidence"]),
+                    bounding_box=observation.get("bounding_box"),
+                    observed_at=observation["observed_at"],
+                    session=session,
+                    entity_closing=closing,
+                )
+            except Exception:
+                self._logger.exception(
+                    "Spatial processing failed for entity_id=%s; "
+                    "rolling back transaction",
+                    entity.id,
+                )
+                raise
 
         self._publish_entity_event(
             event_type,

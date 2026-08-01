@@ -13,7 +13,7 @@
   <header class="top-bar" role="banner">
     <div class="brand">
       <h1>Jarvis Live Activity</h1>
-      <p class="subtitle">v0.5.1 console · REST + WebSocket</p>
+      <p class="subtitle">v0.6.0 console · spatial + REST + WebSocket</p>
     </div>
     <div
       id="status-bar"
@@ -66,6 +66,18 @@
             <span>entity_closed</span>
           </label>
           <label class="check">
+            <input type="checkbox" name="event_type" value="zone_entered" checked />
+            <span>zone_entered</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="zone_exited" checked />
+            <span>zone_exited</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="zone_occupancy_changed" checked />
+            <span>zone_occupancy_changed</span>
+          </label>
+          <label class="check">
             <input type="checkbox" name="event_type" value="observation_recorded" />
             <span>observation_recorded (opt-in)</span>
           </label>
@@ -83,6 +95,10 @@
           <span>Entity ID</span>
           <input type="text" id="filter-entity-id" name="entity_id" autocomplete="off" placeholder="UUID optional" />
         </label>
+        <label class="field">
+          <span>Zone ID</span>
+          <input type="text" id="filter-zone-id" name="zone_id" autocomplete="off" placeholder="UUID optional" />
+        </label>
 
         <div class="filter-actions">
           <button type="submit" id="btn-apply-filters">Apply filters</button>
@@ -91,7 +107,7 @@
       </form>
 
       <p id="filter-hint" class="hint">
-        Lifecycle events load by default. Observations require opt-in above and a matching WebSocket subscription.
+        Lifecycle and spatial events load by default. Observations require opt-in above and a matching WebSocket subscription.
       </p>
       <div id="warning-banner" class="warning-banner" role="alert" hidden></div>
     </aside>
@@ -147,6 +163,66 @@
           <div><dt>Times seen</dt><dd data-field="times_seen">—</dd></div>
         </dl>
         <p id="entity-detail-empty" class="hint">Select an event or entity to inspect.</p>
+      </section>
+
+      <section class="zones-panel" aria-labelledby="zones-heading">
+        <h3 id="zones-heading">Zones</h3>
+        <div id="occupancy-panel" class="occupancy-panel">
+          <p class="hint">Select a zone to view occupancy.</p>
+        </div>
+        <ul id="zone-list" class="zone-list" role="list"></ul>
+
+        <details class="zone-form-details" open>
+          <summary>Create / update zone</summary>
+          <form id="zone-form" class="zone-form">
+            <input type="hidden" id="zone-edit-id" value="" />
+            <label class="field">
+              <span>Name</span>
+              <input type="text" id="zone-name" required maxlength="128" autocomplete="off" />
+            </label>
+            <label class="field">
+              <span>Camera ID</span>
+              <input type="text" id="zone-camera" required autocomplete="off" placeholder="azure_kinect" />
+            </label>
+            <div class="coord-grid">
+              <label class="field"><span>x_min</span><input type="number" id="zone-xmin" min="0" max="1" step="0.01" value="0.2" required /></label>
+              <label class="field"><span>y_min</span><input type="number" id="zone-ymin" min="0" max="1" step="0.01" value="0.2" required /></label>
+              <label class="field"><span>x_max</span><input type="number" id="zone-xmax" min="0" max="1" step="0.01" value="0.8" required /></label>
+              <label class="field"><span>y_max</span><input type="number" id="zone-ymax" min="0" max="1" step="0.01" value="0.8" required /></label>
+            </div>
+            <label class="field">
+              <span>Entity type filter (optional)</span>
+              <input type="text" id="zone-entity-types" autocomplete="off" placeholder="person" />
+            </label>
+            <label class="field">
+              <span>Min confidence (optional)</span>
+              <input type="number" id="zone-min-conf" min="0" max="1" step="0.01" />
+            </label>
+            <label class="field">
+              <span>Position strategy</span>
+              <select id="zone-strategy">
+                <option value="">default</option>
+                <option value="bottom_center">bottom_center</option>
+                <option value="center">center</option>
+              </select>
+            </label>
+            <label class="check">
+              <input type="checkbox" id="zone-enabled" checked />
+              <span>Enabled</span>
+            </label>
+            <div class="filter-actions">
+              <button type="submit" id="btn-zone-save">Save zone</button>
+              <button type="button" id="btn-zone-disable" class="secondary">Disable selected</button>
+              <button type="button" id="btn-zone-reset" class="secondary">Reset form</button>
+            </div>
+            <p id="zone-form-status" class="hint" role="status"></p>
+          </form>
+        </details>
+
+        <section aria-labelledby="zone-sessions-heading">
+          <h4 id="zone-sessions-heading">Recent zone sessions</h4>
+          <ul id="zone-sessions" class="zone-sessions" role="list"></ul>
+        </section>
       </section>
     </aside>
   </div>

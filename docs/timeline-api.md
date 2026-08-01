@@ -1,7 +1,7 @@
-# Timeline & Activity History API (v0.4.2)
+# Timeline & Activity History API (v0.4.2 + spatial v0.6.0)
 
-Read-only chronological timeline derived from existing entity memory tables.
-**No `timeline_events` table** is created.
+Read-only chronological timeline derived from existing entity memory and
+spatial session tables. **No `timeline_events` table** is created.
 
 ## Architecture
 
@@ -9,7 +9,7 @@ Read-only chronological timeline derived from existing entity memory tables.
 FastAPI routes
   → TimelineService
     → TimelineRepository (SQLAlchemy Core UNION ALL)
-      → entities / entity_observations
+      → entities / entity_observations / entity_zone_sessions (+ zones)
 ```
 
 Routes never issue SQLAlchemy queries directly. The repository reuses the
@@ -22,19 +22,29 @@ shared SQLAlchemy session factory from entity memory.
 | `entity_created` | `entities` | `first_seen` | `entity-created:{entity_id}` |
 | `entity_closed` | `entities` where `status=closed` | `last_seen` | `entity-closed:{entity_id}` |
 | `observation_recorded` | `entity_observations` | `observed_at` | `observation:{observation_id}` |
+| `zone_entered` | `entity_zone_sessions` | `entered_at` | `zone-entered:{session_id}` |
+| `zone_exited` | closed sessions | `exited_at` | `zone-exited:{session_id}` |
+| `zone_occupancy_changed` | session transitions | enter/exit time | `zone-occupancy:{session_id}:entered` / `:exited` |
+
+Spatial events use `source: "spatial"` and payload fields such as `zone_id`,
+`zone_name`, `session_id`, and `occupancy`.
 
 There is no `entity_status_changed` event: the schema does not store a full
 status-transition history.
 
 ### Default behaviour
 
-`GET /api/v1/timeline` returns **lifecycle events only**:
+`GET /api/v1/timeline` returns **lifecycle + spatial events** by default:
 
 - `entity_created`
 - `entity_closed`
+- `zone_entered`
+- `zone_exited`
+- `zone_occupancy_changed`
 
 Observations appear **only** when `event_type=observation_recorded` is
-requested (repeatable query parameter).
+requested (repeatable query parameter). Existing clients that only requested
+entity lifecycle types continue to work; new defaults add spatial types.
 
 ## Endpoints
 
@@ -50,9 +60,10 @@ requested (repeatable query parameter).
 |-------|-------|
 | `occurred_after` / `occurred_before` | ISO 8601; AND range on `occurred_at` |
 | `entity_id` | UUID |
-| `event_type` | Repeatable; default lifecycle-only |
+| `event_type` | Repeatable; default lifecycle + spatial |
 | `camera_id` | Matches entity/observation camera |
 | `entity_type` | Detector label (`person`, …) |
+| `zone_id` | UUID; when set, only spatial events for that zone |
 | `limit` | 1…`timeline.maximum_limit` (default 50) |
 | `cursor` | Opaque next-page token |
 | `sort` | `asc` or `desc` (default `desc`) |

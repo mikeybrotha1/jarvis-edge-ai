@@ -118,11 +118,98 @@ export function getTimeline(filters = {}) {
     camera_id: filters.camera_id || undefined,
     entity_type: filters.entity_type || undefined,
     entity_id: filters.entity_id || undefined,
+    zone_id: filters.zone_id || undefined,
     occurred_after: filters.occurred_after || undefined,
     occurred_before: filters.occurred_before || undefined,
     event_type: filters.event_types || undefined,
   };
   return apiGet("/api/v1/timeline", params);
+}
+
+/**
+ * @param {object} [filters]
+ */
+export function getZones(filters = {}) {
+  return apiGet("/api/v1/zones", {
+    camera_id: filters.camera_id || undefined,
+    enabled: filters.enabled,
+    limit: filters.limit ?? 50,
+    offset: filters.offset ?? 0,
+    sort: filters.sort ?? "asc",
+  });
+}
+
+/**
+ * @param {string} zoneId
+ */
+export function getZone(zoneId) {
+  return apiGet(`/api/v1/zones/${encodeURIComponent(zoneId)}`);
+}
+
+/**
+ * @param {string} zoneId
+ */
+export function getZoneOccupancy(zoneId) {
+  return apiGet(`/api/v1/zones/${encodeURIComponent(zoneId)}/occupancy`);
+}
+
+/**
+ * @param {string} zoneId
+ * @param {object} [filters]
+ */
+export function getZoneSessions(zoneId, filters = {}) {
+  return apiGet(`/api/v1/zones/${encodeURIComponent(zoneId)}/sessions`, {
+    limit: filters.limit ?? 20,
+    sort: filters.sort ?? "desc",
+    status: filters.status || undefined,
+  });
+}
+
+/**
+ * @param {object} body
+ */
+export async function createZone(body) {
+  return apiSend("/api/v1/zones", "POST", body);
+}
+
+/**
+ * @param {string} zoneId
+ * @param {object} body
+ */
+export async function patchZone(zoneId, body) {
+  return apiSend(`/api/v1/zones/${encodeURIComponent(zoneId)}`, "PATCH", body);
+}
+
+/**
+ * @param {string} path
+ * @param {string} method
+ * @param {object} body
+ */
+async function apiSend(path, method, body) {
+  let response;
+  try {
+    response = await fetch(path, {
+      method,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+      credentials: "same-origin",
+      body: JSON.stringify(body),
+    });
+  } catch {
+    /** @type {ApiError} */
+    const err = {
+      message: "Network error contacting API",
+      status: null,
+      code: "network_error",
+    };
+    throw err;
+  }
+  if (!response.ok) {
+    await rejectResponse(response);
+  }
+  return response.json();
 }
 
 export function getActiveEntities(limit = 50) {

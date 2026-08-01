@@ -114,6 +114,23 @@ class ActivityNotificationPublisher:
         )
         return True
 
+    def publish_spatial_event(
+        self,
+        session: Session,
+        *,
+        event_id: str,
+        event_type: str,
+        occurred_at: datetime,
+    ) -> None:
+        """Register a spatial timeline notification (same transaction)."""
+
+        self._notify(
+            session,
+            event_id=event_id,
+            event_type=event_type,
+            occurred_at=occurred_at,
+        )
+
     def _notify(
         self,
         session: Session,
@@ -200,6 +217,9 @@ def parse_notification_payload(raw: str | bytes | None) -> dict[str, str]:
         TimelineEventType.ENTITY_CREATED.value,
         TimelineEventType.ENTITY_CLOSED.value,
         TimelineEventType.OBSERVATION_RECORDED.value,
+        TimelineEventType.ZONE_ENTERED.value,
+        TimelineEventType.ZONE_EXITED.value,
+        TimelineEventType.ZONE_OCCUPANCY_CHANGED.value,
     }
     if event_type not in allowed:
         raise ValueError(f"unsupported event_type: {event_type}")

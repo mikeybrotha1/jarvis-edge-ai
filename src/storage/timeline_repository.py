@@ -1,8 +1,8 @@
 """SQLAlchemy Core repository for the derived entity activity timeline.
 
-Builds a read-only UNION ALL projection over ``entities`` and
-``entity_observations`` with database-side filtering, cursor conditions,
-ordering, and limit. No timeline_events table is created.
+Builds a read-only UNION ALL projection over ``entities``,
+``entity_observations``, and ``entity_zone_sessions`` with database-side
+filtering, cursor conditions, ordering, and limit. No timeline_events table.
 """
 
 from __future__ import annotations
@@ -24,10 +24,11 @@ from storage.timeline_models import (
     TimelineListFilter,
     TimelinePage,
 )
+from storage.zone_orm import EntityZoneSession, Zone, ZoneSessionStatus
 
 
 class TimelineRepository:
-    """Project entity lifecycle and observation rows into timeline events."""
+    """Project entity lifecycle, observations, and spatial sessions."""
 
     def __init__(self, session_factory: sessionmaker[Session]) -> None:
         self._session_factory = session_factory
@@ -101,6 +102,29 @@ class TimelineRepository:
                     return None
                 return self._observation_event(observation)
 
+            if event_id.startswith("zone-entered:"):
+                session_id = self._parse_uuid_suffix(event_id, "zone-entered:")
+                if session_id is None:
+                    return None
+                return self._zone_session_event(
+                    session,
+                    session_id,
+                    TimelineEventType.ZONE_ENTERED,
+                )
+
+            if event_id.startswith("zone-exited:"):
+                session_id = self._parse_uuid_suffix(event_id, "zone-exited:")
+                if session_id is None:
+                    return None
+                return self._zone_session_event(
+                    session,
+                    session_id,
+                    TimelineEventType.ZONE_EXITED,
+                )
+
+            if event_id.startswith("zone-occupancy:"):
+                return self._zone_occupancy_event_by_id(session, event_id)
+
         return None
 
     def _build_list_statement(self, filters: TimelineListFilter) -> Select[Any]:
@@ -108,11 +132,21 @@ class TimelineRepository:
 
         for event_type in filters.event_types:
             if event_type is TimelineEventType.ENTITY_CREATED:
-                branches.append(self._created_select(filters))
+                if filters.zone_id is None:
+                    branches.append(self._created_select(filters))
             elif event_type is TimelineEventType.ENTITY_CLOSED:
-                branches.append(self._closed_select(filters))
+                if filters.zone_id is None:
+                    branches.append(self._closed_select(filters))
             elif event_type is TimelineEventType.OBSERVATION_RECORDED:
-                branches.append(self._observation_select(filters))
+                if filters.zone_id is None:
+                    branches.append(self._observation_select(filters))
+            elif event_type is TimelineEventType.ZONE_ENTERED:
+                branches.append(self._zone_entered_select(filters))
+            elif event_type is TimelineEventType.ZONE_EXITED:
+                branches.append(self._zone_exited_select(filters))
+            elif event_type is TimelineEventType.ZONE_OCCUPANCY_CHANGED:
+                branches.append(self._zone_occupancy_entered_select(filters))
+                branches.append(self._zone_occupancy_exited_select(filters))
 
         if not branches:
             empty = select(
@@ -129,6 +163,10 @@ class TimelineRepository:
                 literal(None).label("confidence"),
                 literal(None).label("frame_number"),
                 literal(None).label("source_event_type"),
+                literal(None).label("zone_id"),
+                literal(None).label("zone_name"),
+                literal(None).label("session_id"),
+                literal(None).label("occupancy"),
             ).where(literal(False))
             return empty.limit(0)
 
@@ -150,6 +188,10 @@ class TimelineRepository:
             combined.c.confidence,
             combined.c.frame_number,
             combined.c.source_event_type,
+            combined.c.zone_id,
+            combined.c.zone_name,
+            combined.c.session_id,
+            combined.c.occupancy,
         )
 
         if filters.cursor is not None:
@@ -207,6 +249,10 @@ class TimelineRepository:
             literal(None).label("confidence"),
             literal(None).label("frame_number"),
             literal(None).label("source_event_type"),
+            literal(None).label("zone_id"),
+            literal(None).label("zone_name"),
+            literal(None).label("session_id"),
+            literal(None).label("occupancy"),
         ).select_from(Entity)
 
         return self._apply_entity_filters(
@@ -240,6 +286,10 @@ class TimelineRepository:
                 literal(None).label("confidence"),
                 literal(None).label("frame_number"),
                 literal(None).label("source_event_type"),
+                literal(None).label("zone_id"),
+                literal(None).label("zone_name"),
+                literal(None).label("session_id"),
+                literal(None).label("occupancy"),
             )
             .select_from(Entity)
             .where(Entity.status == EntityStatus.CLOSED)
@@ -275,6 +325,10 @@ class TimelineRepository:
             EntityObservation.confidence.label("confidence"),
             EntityObservation.frame_number.label("frame_number"),
             EntityObservation.source_event_type.label("source_event_type"),
+            literal(None).label("zone_id"),
+            literal(None).label("zone_name"),
+            literal(None).label("session_id"),
+            literal(None).label("occupancy"),
         ).select_from(EntityObservation)
 
         if filters.entity_id is not None:
@@ -297,6 +351,193 @@ class TimelineRepository:
             statement = statement.where(
                 EntityObservation.observed_at <= filters.occurred_before
             )
+        return statement
+
+    def _zone_entered_select(self, filters: TimelineListFilter) -> Select[Any]:
+        event_id = func.concat(
+            literal("zone-entered:"),
+            cast(EntityZoneSession.id, String),
+        )
+        statement = (
+            select(
+                event_id.label("event_id"),
+                literal(TimelineEventType.ZONE_ENTERED.value).label(
+                    "event_type"
+                ),
+                EntityZoneSession.entered_at.label("occurred_at"),
+                literal("spatial").label("source"),
+                cast(EntityZoneSession.entity_id, String).label("entity_id"),
+                EntityZoneSession.camera_id.label("camera_id"),
+                Entity.label.label("entity_type"),
+                literal(None).label("identity_key"),
+                Entity.track_id.label("track_id"),
+                literal(None).label("status"),
+                literal(None).label("confidence"),
+                literal(None).label("frame_number"),
+                literal(None).label("source_event_type"),
+                cast(EntityZoneSession.zone_id, String).label("zone_id"),
+                Zone.name.label("zone_name"),
+                cast(EntityZoneSession.id, String).label("session_id"),
+                EntityZoneSession.occupancy_after_enter.label("occupancy"),
+            )
+            .select_from(EntityZoneSession)
+            .join(Zone, Zone.id == EntityZoneSession.zone_id)
+            .join(Entity, Entity.id == EntityZoneSession.entity_id)
+        )
+        return self._apply_spatial_filters(
+            statement,
+            filters,
+            time_column=EntityZoneSession.entered_at,
+        )
+
+    def _zone_exited_select(self, filters: TimelineListFilter) -> Select[Any]:
+        event_id = func.concat(
+            literal("zone-exited:"),
+            cast(EntityZoneSession.id, String),
+        )
+        statement = (
+            select(
+                event_id.label("event_id"),
+                literal(TimelineEventType.ZONE_EXITED.value).label(
+                    "event_type"
+                ),
+                EntityZoneSession.exited_at.label("occurred_at"),
+                literal("spatial").label("source"),
+                cast(EntityZoneSession.entity_id, String).label("entity_id"),
+                EntityZoneSession.camera_id.label("camera_id"),
+                Entity.label.label("entity_type"),
+                literal(None).label("identity_key"),
+                Entity.track_id.label("track_id"),
+                literal(None).label("status"),
+                literal(None).label("confidence"),
+                literal(None).label("frame_number"),
+                literal(None).label("source_event_type"),
+                cast(EntityZoneSession.zone_id, String).label("zone_id"),
+                Zone.name.label("zone_name"),
+                cast(EntityZoneSession.id, String).label("session_id"),
+                EntityZoneSession.occupancy_after_exit.label("occupancy"),
+            )
+            .select_from(EntityZoneSession)
+            .join(Zone, Zone.id == EntityZoneSession.zone_id)
+            .join(Entity, Entity.id == EntityZoneSession.entity_id)
+            .where(EntityZoneSession.status == ZoneSessionStatus.CLOSED)
+            .where(EntityZoneSession.exited_at.is_not(None))
+        )
+        return self._apply_spatial_filters(
+            statement,
+            filters,
+            time_column=EntityZoneSession.exited_at,
+        )
+
+    def _zone_occupancy_entered_select(
+        self,
+        filters: TimelineListFilter,
+    ) -> Select[Any]:
+        event_id = func.concat(
+            literal("zone-occupancy:"),
+            cast(EntityZoneSession.id, String),
+            literal(":entered"),
+        )
+        statement = (
+            select(
+                event_id.label("event_id"),
+                literal(TimelineEventType.ZONE_OCCUPANCY_CHANGED.value).label(
+                    "event_type"
+                ),
+                EntityZoneSession.entered_at.label("occurred_at"),
+                literal("spatial").label("source"),
+                cast(EntityZoneSession.entity_id, String).label("entity_id"),
+                EntityZoneSession.camera_id.label("camera_id"),
+                Entity.label.label("entity_type"),
+                literal(None).label("identity_key"),
+                Entity.track_id.label("track_id"),
+                literal("entered").label("status"),
+                literal(None).label("confidence"),
+                literal(None).label("frame_number"),
+                literal(None).label("source_event_type"),
+                cast(EntityZoneSession.zone_id, String).label("zone_id"),
+                Zone.name.label("zone_name"),
+                cast(EntityZoneSession.id, String).label("session_id"),
+                EntityZoneSession.occupancy_after_enter.label("occupancy"),
+            )
+            .select_from(EntityZoneSession)
+            .join(Zone, Zone.id == EntityZoneSession.zone_id)
+            .join(Entity, Entity.id == EntityZoneSession.entity_id)
+        )
+        return self._apply_spatial_filters(
+            statement,
+            filters,
+            time_column=EntityZoneSession.entered_at,
+        )
+
+    def _zone_occupancy_exited_select(
+        self,
+        filters: TimelineListFilter,
+    ) -> Select[Any]:
+        event_id = func.concat(
+            literal("zone-occupancy:"),
+            cast(EntityZoneSession.id, String),
+            literal(":exited"),
+        )
+        statement = (
+            select(
+                event_id.label("event_id"),
+                literal(TimelineEventType.ZONE_OCCUPANCY_CHANGED.value).label(
+                    "event_type"
+                ),
+                EntityZoneSession.exited_at.label("occurred_at"),
+                literal("spatial").label("source"),
+                cast(EntityZoneSession.entity_id, String).label("entity_id"),
+                EntityZoneSession.camera_id.label("camera_id"),
+                Entity.label.label("entity_type"),
+                literal(None).label("identity_key"),
+                Entity.track_id.label("track_id"),
+                literal("exited").label("status"),
+                literal(None).label("confidence"),
+                literal(None).label("frame_number"),
+                literal(None).label("source_event_type"),
+                cast(EntityZoneSession.zone_id, String).label("zone_id"),
+                Zone.name.label("zone_name"),
+                cast(EntityZoneSession.id, String).label("session_id"),
+                EntityZoneSession.occupancy_after_exit.label("occupancy"),
+            )
+            .select_from(EntityZoneSession)
+            .join(Zone, Zone.id == EntityZoneSession.zone_id)
+            .join(Entity, Entity.id == EntityZoneSession.entity_id)
+            .where(EntityZoneSession.status == ZoneSessionStatus.CLOSED)
+            .where(EntityZoneSession.exited_at.is_not(None))
+        )
+        return self._apply_spatial_filters(
+            statement,
+            filters,
+            time_column=EntityZoneSession.exited_at,
+        )
+
+    def _apply_spatial_filters(
+        self,
+        statement: Select[Any],
+        filters: TimelineListFilter,
+        *,
+        time_column: Any,
+    ) -> Select[Any]:
+        if filters.entity_id is not None:
+            statement = statement.where(
+                EntityZoneSession.entity_id == filters.entity_id
+            )
+        if filters.camera_id is not None:
+            statement = statement.where(
+                EntityZoneSession.camera_id == filters.camera_id
+            )
+        if filters.entity_type is not None:
+            statement = statement.where(Entity.label == filters.entity_type)
+        if filters.zone_id is not None:
+            statement = statement.where(
+                EntityZoneSession.zone_id == filters.zone_id
+            )
+        if filters.occurred_after is not None:
+            statement = statement.where(time_column >= filters.occurred_after)
+        if filters.occurred_before is not None:
+            statement = statement.where(time_column <= filters.occurred_before)
         return statement
 
     def _apply_entity_filters(
@@ -323,7 +564,7 @@ class TimelineRepository:
 
     def _row_to_event(self, row: Any) -> TimelineEvent:
         event_type = TimelineEventType(str(row["event_type"]))
-        entity_type = str(row["entity_type"])
+        entity_type = str(row["entity_type"] or "unknown")
         camera_id = row["camera_id"]
         camera_display = camera_id or "unknown"
         title = f"{entity_type[:1].upper()}{entity_type[1:]}"
@@ -342,13 +583,44 @@ class TimelineRepository:
                 "track_id": row["track_id"],
                 "status": "closed",
             }
-        else:
+        elif event_type is TimelineEventType.OBSERVATION_RECORDED:
             summary = f"{title} observed on {camera_display}"
             payload = {
                 "confidence": row["confidence"],
                 "frame_number": row["frame_number"],
                 "track_id": row["track_id"],
                 "source_event_type": row["source_event_type"],
+            }
+        elif event_type is TimelineEventType.ZONE_ENTERED:
+            zone_name = row["zone_name"] or "zone"
+            summary = f"{title} entered {zone_name}"
+            payload = {
+                "zone_id": row["zone_id"],
+                "zone_name": zone_name,
+                "session_id": row["session_id"],
+                "occupancy": row["occupancy"],
+            }
+        elif event_type is TimelineEventType.ZONE_EXITED:
+            zone_name = row["zone_name"] or "zone"
+            summary = f"{title} exited {zone_name}"
+            payload = {
+                "zone_id": row["zone_id"],
+                "zone_name": zone_name,
+                "session_id": row["session_id"],
+                "occupancy": row["occupancy"],
+            }
+        else:
+            # zone_occupancy_changed
+            zone_name = row["zone_name"] or "zone"
+            occupancy = row["occupancy"]
+            summary = f"{zone_name} occupancy is now {occupancy}"
+            cause = row["status"]  # entered | exited marker
+            payload = {
+                "zone_id": row["zone_id"],
+                "zone_name": zone_name,
+                "session_id": row["session_id"],
+                "occupancy": occupancy,
+                "cause": cause,
             }
 
         occurred_at = row["occurred_at"]
@@ -431,6 +703,113 @@ class TimelineRepository:
                 "frame_number": observation.frame_number,
                 "track_id": observation.track_id,
                 "source_event_type": observation.source_event_type,
+            },
+        )
+
+    def _zone_session_event(
+        self,
+        session: Session,
+        session_id: UUID,
+        event_type: TimelineEventType,
+    ) -> TimelineEvent | None:
+        row = session.get(EntityZoneSession, session_id)
+        if row is None:
+            return None
+        zone = session.get(Zone, row.zone_id)
+        entity = session.get(Entity, row.entity_id)
+        zone_name = zone.name if zone is not None else "zone"
+        label = entity.label if entity is not None else "entity"
+        title = f"{label[:1].upper()}{label[1:]}"
+
+        if event_type is TimelineEventType.ZONE_ENTERED:
+            return TimelineEvent(
+                id=f"zone-entered:{row.id}",
+                event_type=TimelineEventType.ZONE_ENTERED,
+                occurred_at=self._aware(row.entered_at),
+                source="spatial",
+                entity_id=row.entity_id,
+                camera_id=row.camera_id,
+                entity_type=label,
+                summary=f"{title} entered {zone_name}",
+                payload={
+                    "zone_id": str(row.zone_id),
+                    "zone_name": zone_name,
+                    "session_id": str(row.id),
+                    "occupancy": row.occupancy_after_enter,
+                },
+            )
+
+        if row.status is not ZoneSessionStatus.CLOSED or row.exited_at is None:
+            return None
+        return TimelineEvent(
+            id=f"zone-exited:{row.id}",
+            event_type=TimelineEventType.ZONE_EXITED,
+            occurred_at=self._aware(row.exited_at),
+            source="spatial",
+            entity_id=row.entity_id,
+            camera_id=row.camera_id,
+            entity_type=label,
+            summary=f"{title} exited {zone_name}",
+            payload={
+                "zone_id": str(row.zone_id),
+                "zone_name": zone_name,
+                "session_id": str(row.id),
+                "occupancy": row.occupancy_after_exit,
+            },
+        )
+
+    def _zone_occupancy_event_by_id(
+        self,
+        session: Session,
+        event_id: str,
+    ) -> TimelineEvent | None:
+        # zone-occupancy:{session_id}:entered|exited
+        rest = event_id[len("zone-occupancy:") :]
+        if rest.endswith(":entered"):
+            cause = "entered"
+            raw_id = rest[: -len(":entered")]
+        elif rest.endswith(":exited"):
+            cause = "exited"
+            raw_id = rest[: -len(":exited")]
+        else:
+            return None
+        try:
+            session_id = UUID(raw_id)
+        except ValueError:
+            return None
+
+        row = session.get(EntityZoneSession, session_id)
+        if row is None:
+            return None
+        zone = session.get(Zone, row.zone_id)
+        entity = session.get(Entity, row.entity_id)
+        zone_name = zone.name if zone is not None else "zone"
+        label = entity.label if entity is not None else "entity"
+
+        if cause == "entered":
+            occurred = row.entered_at
+            occupancy = row.occupancy_after_enter
+        else:
+            if row.status is not ZoneSessionStatus.CLOSED or row.exited_at is None:
+                return None
+            occurred = row.exited_at
+            occupancy = row.occupancy_after_exit
+
+        return TimelineEvent(
+            id=event_id,
+            event_type=TimelineEventType.ZONE_OCCUPANCY_CHANGED,
+            occurred_at=self._aware(occurred),
+            source="spatial",
+            entity_id=row.entity_id,
+            camera_id=row.camera_id,
+            entity_type=label,
+            summary=f"{zone_name} occupancy is now {occupancy}",
+            payload={
+                "zone_id": str(row.zone_id),
+                "zone_name": zone_name,
+                "session_id": str(row.id),
+                "occupancy": occupancy,
+                "cause": cause,
             },
         )
 

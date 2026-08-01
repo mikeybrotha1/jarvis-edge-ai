@@ -23,14 +23,17 @@ from services.vision_persistence_service import (
 )
 from storage.config import DatabaseSettings
 from storage.database import Database
+from services.spatial_service import SpatialService
 from storage.activity_notify import ActivityNotificationPublisher
 from storage.entity_repository import EntityRepository
+from storage.entity_zone_session_repository import EntityZoneSessionRepository
 from storage.observation_repository import ObservationRepository
 from storage.repository import VisionRepository
 from storage.sqlalchemy_db import (
     create_entity_engine,
     create_session_factory,
 )
+from storage.zone_repository import ZoneRepository
 from tracked_view import build_tracked_view
 from utils import configure_logging
 from vision_events import publish_frame_processed
@@ -90,6 +93,37 @@ def main() -> int:
             logger=logger,
         )
 
+    zone_repository = ZoneRepository(entity_session_factory)
+    entity_zone_session_repository = EntityZoneSessionRepository(
+        entity_session_factory
+    )
+    spatial_service = SpatialService(
+        zone_repository,
+        entity_zone_session_repository,
+        enabled=app_config.spatial.enabled,
+        position_strategy=app_config.spatial.position_strategy,
+        enter_confirm_observations=(
+            app_config.spatial.enter_confirm_observations
+        ),
+        exit_confirm_observations=(
+            app_config.spatial.exit_confirm_observations
+        ),
+        lost_track_timeout_seconds=(
+            app_config.spatial.lost_track_timeout_seconds
+        ),
+        maximum_zones_per_camera=(
+            app_config.spatial.maximum_zones_per_camera
+        ),
+        occupancy_stale_seconds=app_config.spatial.occupancy_stale_seconds,
+        publish_occupancy_changes=(
+            app_config.spatial.publish_occupancy_changes
+        ),
+        camera_width=app_config.camera.width,
+        camera_height=app_config.camera.height,
+        activity_publisher=activity_publisher,
+        logger=logger,
+    )
+
     entity_memory = EntityMemoryService(
         event_bus,
         entity_repository,
@@ -104,6 +138,7 @@ def main() -> int:
         ),
         snapshot_on_update=app_config.entity_memory.snapshot_on_update,
         activity_publisher=activity_publisher,
+        spatial_service=spatial_service,
         logger=logger,
     )
 

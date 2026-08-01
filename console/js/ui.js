@@ -119,11 +119,15 @@ export function renderEventFeed(listEl, events, selectedId, onSelect, renderCap 
       text: String(event.event_type || "event"),
     });
 
+    const zoneName =
+      (event.payload && event.payload.zone_name) ||
+      (isSpatialType(event.event_type) ? "zone" : null);
+
     const summary = el("p", {
       className: "event-summary",
       text: String(event.summary || "(no summary)"),
     });
-    const meta = el("p", { className: "event-meta" }, [
+    const metaChildren = [
       el("span", { text: formatTime(event.occurred_at) }),
       el("span", { text: String(event.camera_id || "—") }),
       el("span", { text: String(event.entity_type || "—") }),
@@ -131,7 +135,16 @@ export function renderEventFeed(listEl, events, selectedId, onSelect, renderCap 
         className: "mono",
         text: truncateId(String(event.entity_id || "")),
       }),
-    ]);
+    ];
+    if (zoneName) {
+      metaChildren.push(
+        el("span", {
+          className: "zone-badge",
+          text: String(zoneName),
+        })
+      );
+    }
+    const meta = el("p", { className: "event-meta" }, metaChildren);
     const body = el("div", { className: "event-body" }, [summary, meta]);
 
     const source = el("span", {
@@ -249,6 +262,115 @@ export function moveFeedSelection(listEl, selectedId, direction, onSelect) {
     onSelect(next.dataset.eventId);
     next.focus();
   }
+}
+
+/**
+ * @param {HTMLElement} listEl
+ * @param {object[]} zones
+ * @param {string|null} selectedZoneId
+ * @param {(id: string) => void} onSelect
+ */
+export function renderZoneList(listEl, zones, selectedZoneId, onSelect) {
+  clearChildren(listEl);
+  if (!zones || zones.length === 0) {
+    listEl.appendChild(
+      el("li", {}, [el("p", { className: "empty-list", text: "No zones" })])
+    );
+    return;
+  }
+  for (const zone of zones) {
+    const id = String(zone.id);
+    const btn = el("button", {
+      type: "button",
+      "aria-pressed": selectedZoneId === id ? "true" : "false",
+    });
+    const enabled = zone.enabled === false ? "disabled" : "enabled";
+    const line = el("span", { className: "entity-line" }, [
+      el("span", {
+        text: `${zone.name || "zone"} · ${enabled} · ${zone.camera_id || "—"}`,
+      }),
+      el("span", { className: "entity-id", text: id }),
+    ]);
+    btn.appendChild(line);
+    btn.addEventListener("click", () => onSelect(id));
+    const li = el("li");
+    li.appendChild(btn);
+    listEl.appendChild(li);
+  }
+}
+
+/**
+ * @param {HTMLElement} panel
+ * @param {object|null} occupancy
+ */
+export function renderOccupancyPanel(panel, occupancy) {
+  clearChildren(panel);
+  if (!occupancy) {
+    panel.appendChild(
+      el("p", { className: "hint", text: "Select a zone to view occupancy." })
+    );
+    return;
+  }
+  panel.appendChild(
+    el("p", {
+      className: "occupancy-title",
+      text: `${occupancy.zone_name || "Zone"} · occupancy ${occupancy.occupancy ?? 0}`,
+    })
+  );
+  panel.appendChild(
+    el("p", {
+      className: "hint",
+      text: `Camera ${occupancy.camera_id || "—"} · updated ${formatTime(occupancy.updated_at)}`,
+    })
+  );
+  const entities = occupancy.entities || [];
+  if (entities.length === 0) {
+    panel.appendChild(el("p", { className: "empty-list", text: "Empty" }));
+    return;
+  }
+  const list = el("ul", { className: "occupancy-entities" });
+  for (const ent of entities) {
+    const dwell =
+      ent.dwell_seconds == null ? "—" : `${Number(ent.dwell_seconds).toFixed(1)}s`;
+    list.appendChild(
+      el("li", {
+        text: `${ent.entity_type || ent.label || "entity"} · dwell ${dwell} · ${truncateId(String(ent.entity_id || ""))}`,
+      })
+    );
+  }
+  panel.appendChild(list);
+}
+
+/**
+ * @param {HTMLElement} listEl
+ * @param {object[]} sessions
+ */
+export function renderZoneSessions(listEl, sessions) {
+  clearChildren(listEl);
+  if (!sessions || sessions.length === 0) {
+    listEl.appendChild(
+      el("li", {}, [el("p", { className: "empty-list", text: "No sessions" })])
+    );
+    return;
+  }
+  for (const sess of sessions) {
+    const dwell =
+      sess.dwell_seconds == null ? "—" : `${Number(sess.dwell_seconds).toFixed(1)}s`;
+    listEl.appendChild(
+      el("li", {
+        text: `${sess.status || "—"} · ${formatTime(sess.entered_at)} · dwell ${dwell} · ${truncateId(String(sess.entity_id || ""))}`,
+      })
+    );
+  }
+}
+
+function isSpatialType(eventType) {
+  const t = String(eventType || "");
+  return (
+    t === "zone_entered" ||
+    t === "zone_exited" ||
+    t === "zone_occupancy_changed"
+  );
 }
 
 function formatTime(value) {

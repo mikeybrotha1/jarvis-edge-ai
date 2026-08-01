@@ -83,10 +83,13 @@ def test_connection_ready_and_default_subscription() -> None:
             ready = ws.receive_json()
             assert ready["type"] == "connection.ready"
             assert ready["protocol_version"] == "1"
-            assert ready["stream_version"] == "0.5.0"
+            assert ready["stream_version"] == "0.6.0"
             assert ready["subscription"]["event_types"] == [
                 "entity_closed",
                 "entity_created",
+                "zone_entered",
+                "zone_exited",
+                "zone_occupancy_changed",
             ]
 
 
