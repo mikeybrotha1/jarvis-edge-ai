@@ -3,11 +3,16 @@
  */
 
 import {
+  createZone,
   getActiveEntities,
   getEntity,
   getHealth,
   getRecentEntities,
   getTimeline,
+  getZoneOccupancy,
+  getZoneSessions,
+  getZones,
+  patchZone,
   sanitizeMessage,
 } from "./api.js";
 import { createRecoveryController, filtersFromUi } from "./recovery.js";
@@ -17,7 +22,10 @@ import {
   renderEntityDetail,
   renderEntityList,
   renderEventFeed,
+  renderOccupancyPanel,
   renderStatusBar,
+  renderZoneList,
+  renderZoneSessions,
   setWarning,
 } from "./ui.js";
 import { createActivitySocket } from "./ws.js";
@@ -39,10 +47,29 @@ const dom = {
   filterCamera: document.getElementById("filter-camera"),
   filterEntityType: document.getElementById("filter-entity-type"),
   filterEntityId: document.getElementById("filter-entity-id"),
+  filterZoneId: document.getElementById("filter-zone-id"),
   activeEntities: document.getElementById("active-entities"),
   recentEntities: document.getElementById("recent-entities"),
   entityDetail: document.getElementById("entity-detail"),
   entityDetailEmpty: document.getElementById("entity-detail-empty"),
+  zoneList: document.getElementById("zone-list"),
+  occupancyPanel: document.getElementById("occupancy-panel"),
+  zoneSessions: document.getElementById("zone-sessions"),
+  zoneForm: document.getElementById("zone-form"),
+  zoneEditId: document.getElementById("zone-edit-id"),
+  zoneName: document.getElementById("zone-name"),
+  zoneCamera: document.getElementById("zone-camera"),
+  zoneXmin: document.getElementById("zone-xmin"),
+  zoneYmin: document.getElementById("zone-ymin"),
+  zoneXmax: document.getElementById("zone-xmax"),
+  zoneYmax: document.getElementById("zone-ymax"),
+  zoneEntityTypes: document.getElementById("zone-entity-types"),
+  zoneMinConf: document.getElementById("zone-min-conf"),
+  zoneStrategy: document.getElementById("zone-strategy"),
+  zoneEnabled: document.getElementById("zone-enabled"),
+  zoneFormStatus: document.getElementById("zone-form-status"),
+  btnZoneDisable: document.getElementById("btn-zone-disable"),
+  btnZoneReset: document.getElementById("btn-zone-reset"),
   status: {
     ws: {
       item: document.querySelector('[data-status="ws"]'),
@@ -73,11 +100,23 @@ const dom = {
 
 /** @type {object} */
 let uiFilters = {
-  event_types: ["entity_created", "entity_closed"],
+  event_types: [
+    "entity_created",
+    "entity_closed",
+    "zone_entered",
+    "zone_exited",
+    "zone_occupancy_changed",
+  ],
   camera_id: "",
   entity_type: "",
   entity_id: "",
+  zone_id: "",
 };
+
+/** @type {string|null} */
+let selectedZoneId = null;
+/** @type {object[]} */
+let zonesCache = [];
 
 let nextCursor = null;
 let historyExhausted = false;
@@ -164,10 +203,19 @@ function readFiltersFromForm() {
     dom.filtersForm.querySelectorAll('input[name="event_type"]:checked')
   ).map((n) => n.value);
   uiFilters = {
-    event_types: types.length ? types : ["entity_created", "entity_closed"],
+    event_types: types.length
+      ? types
+      : [
+          "entity_created",
+          "entity_closed",
+          "zone_entered",
+          "zone_exited",
+          "zone_occupancy_changed",
+        ],
     camera_id: dom.filterCamera.value.trim(),
     entity_type: dom.filterEntityType.value.trim(),
     entity_id: dom.filterEntityId.value.trim(),
+    zone_id: dom.filterZoneId ? dom.filterZoneId.value.trim() : "",
   };
   return uiFilters;
 }
@@ -179,6 +227,7 @@ function applyWsSubscription() {
     camera_ids: f.camera_id ? [f.camera_id] : [],
     entity_ids: f.entity_id ? [f.entity_id] : [],
     entity_types: f.entity_type ? [f.entity_type] : [],
+    zone_ids: f.zone_id ? [f.zone_id] : [],
   });
 }
 
@@ -367,15 +416,22 @@ function wireUi() {
   });
 
   dom.clearFilters.addEventListener("click", async () => {
+    const defaults = new Set([
+      "entity_created",
+      "entity_closed",
+      "zone_entered",
+      "zone_exited",
+      "zone_occupancy_changed",
+    ]);
     for (const input of dom.filtersForm.querySelectorAll(
       'input[name="event_type"]'
     )) {
-      input.checked =
-        input.value === "entity_created" || input.value === "entity_closed";
+      input.checked = defaults.has(input.value);
     }
     dom.filterCamera.value = "";
     dom.filterEntityType.value = "";
     dom.filterEntityId.value = "";
+    if (dom.filterZoneId) dom.filterZoneId.value = "";
     readFiltersFromForm();
     applyWsSubscription();
     refreshStatus();
@@ -402,6 +458,164 @@ function wireUi() {
       );
     }
   });
+
+  if (dom.zoneForm) {
+    dom.zoneForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      await saveZoneFromForm();
+    });
+  }
+  if (dom.btnZoneDisable) {
+    dom.btnZoneDisable.addEventListener("click", () => {
+      void disableSelectedZone();
+    });
+  }
+  if (dom.btnZoneReset) {
+    dom.btnZoneReset.addEventListener("click", () => {
+      resetZoneForm();
+    });
+  }
+}
+
+function resetZoneForm() {
+  if (!dom.zoneForm) return;
+  dom.zoneEditId.value = "";
+  dom.zoneName.value = "";
+  dom.zoneCamera.value = "";
+  dom.zoneXmin.value = "0.2";
+  dom.zoneYmin.value = "0.2";
+  dom.zoneXmax.value = "0.8";
+  dom.zoneYmax.value = "0.8";
+  dom.zoneEntityTypes.value = "";
+  dom.zoneMinConf.value = "";
+  dom.zoneStrategy.value = "";
+  dom.zoneEnabled.checked = true;
+  setZoneFormStatus("");
+}
+
+function setZoneFormStatus(message) {
+  if (dom.zoneFormStatus) {
+    dom.zoneFormStatus.textContent = message ? String(message) : "";
+  }
+}
+
+function fillZoneForm(zone) {
+  if (!zone) return;
+  dom.zoneEditId.value = String(zone.id || "");
+  dom.zoneName.value = String(zone.name || "");
+  dom.zoneCamera.value = String(zone.camera_id || "");
+  const verts = zone.vertices || [];
+  const xs = verts.map((v) => Number(v.x)).filter((n) => Number.isFinite(n));
+  const ys = verts.map((v) => Number(v.y)).filter((n) => Number.isFinite(n));
+  if (xs.length && ys.length) {
+    dom.zoneXmin.value = String(Math.min(...xs));
+    dom.zoneXmax.value = String(Math.max(...xs));
+    dom.zoneYmin.value = String(Math.min(...ys));
+    dom.zoneYmax.value = String(Math.max(...ys));
+  }
+  dom.zoneEntityTypes.value = Array.isArray(zone.entity_type_filters)
+    ? zone.entity_type_filters.join(", ")
+    : "";
+  dom.zoneMinConf.value =
+    zone.min_confidence == null ? "" : String(zone.min_confidence);
+  dom.zoneStrategy.value = zone.position_strategy || "";
+  dom.zoneEnabled.checked = zone.enabled !== false;
+}
+
+async function saveZoneFromForm() {
+  const body = {
+    name: dom.zoneName.value.trim(),
+    camera_id: dom.zoneCamera.value.trim(),
+    x_min: Number(dom.zoneXmin.value),
+    y_min: Number(dom.zoneYmin.value),
+    x_max: Number(dom.zoneXmax.value),
+    y_max: Number(dom.zoneYmax.value),
+    enabled: !!dom.zoneEnabled.checked,
+  };
+  const types = dom.zoneEntityTypes.value
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (types.length) body.entity_type_filters = types;
+  if (dom.zoneMinConf.value !== "") {
+    body.min_confidence = Number(dom.zoneMinConf.value);
+  }
+  if (dom.zoneStrategy.value) {
+    body.position_strategy = dom.zoneStrategy.value;
+  }
+
+  try {
+    const editId = dom.zoneEditId.value.trim();
+    if (editId) {
+      await patchZone(editId, body);
+      setZoneFormStatus("Zone updated.");
+      selectedZoneId = editId;
+    } else {
+      const created = await createZone(body);
+      setZoneFormStatus("Zone created.");
+      selectedZoneId = created && created.id ? String(created.id) : null;
+    }
+    await loadZones();
+  } catch (err) {
+    setZoneFormStatus(sanitizeMessage(err.message || "Zone save failed"));
+  }
+}
+
+async function disableSelectedZone() {
+  if (!selectedZoneId) {
+    setZoneFormStatus("Select a zone first.");
+    return;
+  }
+  try {
+    await patchZone(selectedZoneId, { enabled: false });
+    setZoneFormStatus("Zone disabled.");
+    await loadZones();
+  } catch (err) {
+    setZoneFormStatus(sanitizeMessage(err.message || "Disable failed"));
+  }
+}
+
+async function loadZones() {
+  if (!dom.zoneList) return;
+  try {
+    const page = await getZones({ limit: 50 });
+    zonesCache = Array.isArray(page.items) ? page.items : [];
+    renderZoneList(dom.zoneList, zonesCache, selectedZoneId, onZoneSelected);
+    if (selectedZoneId) {
+      await loadZoneDetails(selectedZoneId);
+    } else {
+      renderOccupancyPanel(dom.occupancyPanel, null);
+      renderZoneSessions(dom.zoneSessions, []);
+    }
+  } catch (err) {
+    showWarning(sanitizeMessage(err.message || "Failed to load zones"));
+  }
+}
+
+async function onZoneSelected(zoneId) {
+  selectedZoneId = zoneId;
+  const zone = zonesCache.find((z) => String(z.id) === String(zoneId));
+  if (zone) fillZoneForm(zone);
+  renderZoneList(dom.zoneList, zonesCache, selectedZoneId, onZoneSelected);
+  await loadZoneDetails(zoneId);
+}
+
+async function loadZoneDetails(zoneId) {
+  try {
+    const [occ, sessions] = await Promise.all([
+      getZoneOccupancy(zoneId),
+      getZoneSessions(zoneId, { limit: 15 }),
+    ]);
+    renderOccupancyPanel(dom.occupancyPanel, occ);
+    renderZoneSessions(
+      dom.zoneSessions,
+      Array.isArray(sessions.items) ? sessions.items : []
+    );
+  } catch (err) {
+    renderOccupancyPanel(dom.occupancyPanel, null);
+    renderZoneSessions(dom.zoneSessions, []);
+    showWarning(sanitizeMessage(err.message || "Failed to load zone detail"));
+  }
 }
 
 async function init() {
@@ -410,10 +624,13 @@ async function init() {
   refreshStatus();
   refreshFeed();
   renderEntityDetail(dom.entityDetail, null, dom.entityDetailEmpty);
+  if (dom.occupancyPanel) renderOccupancyPanel(dom.occupancyPanel, null);
+  if (dom.zoneSessions) renderZoneSessions(dom.zoneSessions, []);
 
   await probeHealth();
   await loadInitialHistory();
   await loadEntityLists();
+  await loadZones();
   socket.start();
   applyWsSubscription();
   refreshStatus();

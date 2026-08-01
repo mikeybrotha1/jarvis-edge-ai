@@ -22,11 +22,14 @@ from api.activity_ws import router as activity_ws_router
 from api.entity_routes import router as entity_router
 from api.schemas import HealthOut
 from api.timeline_routes import entity_timeline_router, router as timeline_router
+from api.zone_routes import entity_zones_router, router as zone_router
 from services.activity_listener import ActivityNotificationListener
 from services.activity_stream import ActivityStreamBroker
 from services.entity_query_service import EntityQueryService, QueryLimits
 from services.timeline_service import TimelineLimits, TimelineService
+from services.zone_query_service import ZoneQueryLimits, ZoneQueryService
 from storage.entity_repository import EntityRepository
+from storage.entity_zone_session_repository import EntityZoneSessionRepository
 from storage.observation_repository import ObservationRepository
 from storage.sqlalchemy_db import (
     create_entity_engine,
@@ -34,6 +37,7 @@ from storage.sqlalchemy_db import (
     create_session_factory,
 )
 from storage.timeline_repository import TimelineRepository
+from storage.zone_repository import ZoneRepository
 
 logger = logging.getLogger(__name__)
 
@@ -42,10 +46,12 @@ def create_app(
     *,
     query_service: EntityQueryService | None = None,
     timeline_service: TimelineService | None = None,
+    zone_query_service: ZoneQueryService | None = None,
     session_factory: sessionmaker[Session] | None = None,
     database_url: str | None = None,
     limits: QueryLimits | None = None,
     timeline_limits: TimelineLimits | None = None,
+    zone_limits: ZoneQueryLimits | None = None,
     activity_stream_config: Any | None = None,
     activity_broker: ActivityStreamBroker | None = None,
     activity_listener: ActivityNotificationListener | None = None,
@@ -117,30 +123,50 @@ def create_app(
 
     app = FastAPI(
         title=title,
-        version="0.5.0",
+        version="0.6.0",
         lifespan=lifespan,
     )
 
     resolved_service = query_service
     resolved_timeline = timeline_service
+    resolved_zones = zone_query_service
     engine = None
     factory = session_factory
     resolved_db_url = database_url
 
-    if resolved_service is None or resolved_timeline is None:
+    need_repositories = (
+        resolved_service is None
+        or resolved_timeline is None
+        or resolved_zones is None
+    )
+
+    if need_repositories:
         if factory is None:
-            if not database_url or not database_url.strip():
+            if database_url and str(database_url).strip():
+                engine = create_entity_engine(database_url)
+                if create_schema:
+                    create_entity_schema(engine)
+                factory = create_session_factory(engine)
+            elif (
+                resolved_service is not None
+                and resolved_timeline is not None
+                and resolved_zones is None
+            ):
+                # Tests inject query/timeline without a factory: provide an
+                # isolated in-memory zone stack so zone routes remain usable.
+                engine = create_entity_engine("sqlite+pysqlite:///:memory:")
+                create_entity_schema(engine)
+                factory = create_session_factory(engine)
+            else:
                 raise ValueError(
                     "database_url is required when query_service / "
                     "timeline_service and session_factory are not provided."
                 )
-            engine = create_entity_engine(database_url)
-            if create_schema:
-                create_entity_schema(engine)
-            factory = create_session_factory(engine)
 
         entity_repository = EntityRepository(factory)
         observation_repository = ObservationRepository(factory)
+        zone_repository = ZoneRepository(factory)
+        session_repository = EntityZoneSessionRepository(factory)
 
         if resolved_service is None:
             resolved_service = EntityQueryService(
@@ -158,6 +184,15 @@ def create_app(
                 logger=logger,
             )
 
+        if resolved_zones is None:
+            resolved_zones = ZoneQueryService(
+                zone_repository,
+                session_repository,
+                entity_repository,
+                limits=zone_limits,
+                logger=logger,
+            )
+
         app.state.session_factory = factory
         app.state.engine = engine
     else:
@@ -166,8 +201,10 @@ def create_app(
 
     app.state.query_service = resolved_service
     app.state.timeline_service = resolved_timeline
+    app.state.zone_query_service = resolved_zones
     app.state.limits = limits or QueryLimits()
     app.state.timeline_limits = timeline_limits or TimelineLimits()
+    app.state.zone_limits = zone_limits or ZoneQueryLimits()
 
     # Activity stream wiring (optional; REST works without it).
     stream_cfg = activity_stream_config
@@ -225,7 +262,9 @@ def create_app(
 
     app.include_router(entity_router)
     app.include_router(entity_timeline_router)
+    app.include_router(entity_zones_router)
     app.include_router(timeline_router)
+    app.include_router(zone_router)
     app.include_router(activity_ws_router)
 
     _mount_live_activity_console(app)
@@ -326,13 +365,6 @@ def build_app_from_loaded_config(
 ) -> FastAPI:
     """Build the API app from an already-loaded ``AppConfig``.
 
-def build_app_from_loaded_config(
-    app_config: Any,
-    *,
-    create_schema: bool = False,
-) -> FastAPI:
-    """Build the API app from an already-loaded ``AppConfig``.
-
     Used by both ``python -m api`` and ``create_app_from_config`` so CLI and
     uvicorn factory paths wire activity_stream identically.
     """
@@ -345,10 +377,16 @@ def build_app_from_loaded_config(
         default_limit=app_config.timeline.default_limit,
         maximum_limit=app_config.timeline.maximum_limit,
     )
+    zone_limits = ZoneQueryLimits(
+        default_limit=app_config.api.default_limit,
+        maximum_limit=app_config.api.maximum_limit,
+        maximum_zones_per_camera=app_config.spatial.maximum_zones_per_camera,
+    )
     return create_app(
         database_url=app_config.database.url,
         limits=limits,
         timeline_limits=timeline_limits,
+        zone_limits=zone_limits,
         activity_stream_config=app_config.activity_stream,
         create_schema=create_schema,
     )

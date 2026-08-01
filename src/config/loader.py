@@ -27,6 +27,7 @@ from config.models import (
     LoggingConfig,
     MemoryConfig,
     RuntimeConfig,
+    SpatialConfig,
     TimelineConfig,
 )
 
@@ -87,11 +88,24 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "reconnect_max_seconds",
         }
     ),
+    "spatial": frozenset(
+        {
+            "enabled",
+            "position_strategy",
+            "enter_confirm_observations",
+            "exit_confirm_observations",
+            "lost_track_timeout_seconds",
+            "maximum_zones_per_camera",
+            "occupancy_stale_seconds",
+            "publish_occupancy_changes",
+        }
+    ),
     "logging": frozenset({"level", "log_file"}),
     "runtime": frozenset({"platform", "application"}),
 }
 
 _VALID_IDENTITY_STRATEGIES = frozenset({"tracker_id"})
+_VALID_POSITION_STRATEGIES = frozenset({"bottom_center", "center"})
 
 _KNOWN_SECTIONS = frozenset(_SECTION_FIELDS)
 
@@ -219,6 +233,28 @@ def _default_values() -> dict[str, dict[str, Any]]:
             ),
             "reconnect_max_seconds": (
                 defaults.activity_stream.reconnect_max_seconds
+            ),
+        },
+        "spatial": {
+            "enabled": defaults.spatial.enabled,
+            "position_strategy": defaults.spatial.position_strategy,
+            "enter_confirm_observations": (
+                defaults.spatial.enter_confirm_observations
+            ),
+            "exit_confirm_observations": (
+                defaults.spatial.exit_confirm_observations
+            ),
+            "lost_track_timeout_seconds": (
+                defaults.spatial.lost_track_timeout_seconds
+            ),
+            "maximum_zones_per_camera": (
+                defaults.spatial.maximum_zones_per_camera
+            ),
+            "occupancy_stale_seconds": (
+                defaults.spatial.occupancy_stale_seconds
+            ),
+            "publish_occupancy_changes": (
+                defaults.spatial.publish_occupancy_changes
             ),
         },
         "logging": {
@@ -540,6 +576,62 @@ def _apply_env_overrides(
         environ,
         "JARVIS_ACTIVITY_STREAM_RECONNECT_MAX_SECONDS",
     )
+    _set_env_bool(
+        values,
+        "spatial",
+        "enabled",
+        environ,
+        "JARVIS_SPATIAL_ENABLED",
+    )
+    _set_env_string(
+        values,
+        "spatial",
+        "position_strategy",
+        environ,
+        "JARVIS_SPATIAL_POSITION_STRATEGY",
+    )
+    _set_env_int(
+        values,
+        "spatial",
+        "enter_confirm_observations",
+        environ,
+        "JARVIS_SPATIAL_ENTER_CONFIRM_OBSERVATIONS",
+    )
+    _set_env_int(
+        values,
+        "spatial",
+        "exit_confirm_observations",
+        environ,
+        "JARVIS_SPATIAL_EXIT_CONFIRM_OBSERVATIONS",
+    )
+    _set_env_float(
+        values,
+        "spatial",
+        "lost_track_timeout_seconds",
+        environ,
+        "JARVIS_SPATIAL_LOST_TRACK_TIMEOUT_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "spatial",
+        "maximum_zones_per_camera",
+        environ,
+        "JARVIS_SPATIAL_MAXIMUM_ZONES_PER_CAMERA",
+    )
+    _set_env_float(
+        values,
+        "spatial",
+        "occupancy_stale_seconds",
+        environ,
+        "JARVIS_SPATIAL_OCCUPANCY_STALE_SECONDS",
+    )
+    _set_env_bool(
+        values,
+        "spatial",
+        "publish_occupancy_changes",
+        environ,
+        "JARVIS_SPATIAL_PUBLISH_OCCUPANCY_CHANGES",
+    )
     _set_env_string(
         values,
         "logging",
@@ -850,6 +942,65 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "reconnect_max_seconds."
         )
 
+    spatial_enabled = values["spatial"]["enabled"]
+    if not isinstance(spatial_enabled, bool):
+        errors.append("spatial.enabled must be a boolean.")
+
+    position_strategy = values["spatial"]["position_strategy"]
+    if (
+        not isinstance(position_strategy, str)
+        or not position_strategy.strip()
+    ):
+        errors.append(
+            "spatial.position_strategy must be a non-empty string."
+        )
+    elif (
+        position_strategy.strip().lower()
+        not in _VALID_POSITION_STRATEGIES
+    ):
+        errors.append(
+            "spatial.position_strategy must be one of: "
+            + ", ".join(sorted(_VALID_POSITION_STRATEGIES))
+            + f". Got {position_strategy!r}."
+        )
+
+    for field_name in (
+        "enter_confirm_observations",
+        "exit_confirm_observations",
+        "maximum_zones_per_camera",
+    ):
+        value = values["spatial"][field_name]
+        if not _is_int(value) or int(value) < 1:
+            errors.append(
+                f"spatial.{field_name} must be an integer >= 1."
+            )
+
+    for field_name in (
+        "lost_track_timeout_seconds",
+        "occupancy_stale_seconds",
+    ):
+        value = values["spatial"][field_name]
+        if not _is_number(value) or float(value) <= 0:
+            errors.append(
+                f"spatial.{field_name} must be a number > 0."
+            )
+        elif float(value) > 3600:
+            errors.append(
+                f"spatial.{field_name} must be <= 3600 seconds."
+            )
+
+    max_zones = values["spatial"]["maximum_zones_per_camera"]
+    if _is_int(max_zones) and int(max_zones) > 100:
+        errors.append(
+            "spatial.maximum_zones_per_camera must be <= 100."
+        )
+
+    publish_occ = values["spatial"]["publish_occupancy_changes"]
+    if not isinstance(publish_occ, bool):
+        errors.append(
+            "spatial.publish_occupancy_changes must be a boolean."
+        )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -971,6 +1122,32 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             ),
             reconnect_max_seconds=float(
                 values["activity_stream"]["reconnect_max_seconds"]
+            ),
+        ),
+        spatial=SpatialConfig(
+            enabled=bool(values["spatial"]["enabled"]),
+            position_strategy=str(
+                values["spatial"]["position_strategy"]
+            )
+            .strip()
+            .lower(),
+            enter_confirm_observations=int(
+                values["spatial"]["enter_confirm_observations"]
+            ),
+            exit_confirm_observations=int(
+                values["spatial"]["exit_confirm_observations"]
+            ),
+            lost_track_timeout_seconds=float(
+                values["spatial"]["lost_track_timeout_seconds"]
+            ),
+            maximum_zones_per_camera=int(
+                values["spatial"]["maximum_zones_per_camera"]
+            ),
+            occupancy_stale_seconds=float(
+                values["spatial"]["occupancy_stale_seconds"]
+            ),
+            publish_occupancy_changes=bool(
+                values["spatial"]["publish_occupancy_changes"]
             ),
         ),
         logging=LoggingConfig(

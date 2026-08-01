@@ -1,13 +1,13 @@
-# Real-time Activity Stream (v0.5.0)
+# Real-time Activity Stream (v0.5.0 + spatial v0.6.0)
 
 Best-effort, read-only WebSocket stream of the same **TimelineEvent**
-projections exposed by the v0.4.2 Timeline REST API.
+projections exposed by the Timeline REST API (including spatial events).
 
 ## Architecture and process boundaries
 
 ```
-Vision / EntityMemoryService process
-  └─ durable write (entities / entity_observations)
+Vision / EntityMemoryService process (+ SpatialService)
+  └─ durable write (entities / observations / entity_zone_sessions)
      + SELECT pg_notify(channel, minimal_payload)   # same SQLAlchemy transaction
      └─ COMMIT  →  PostgreSQL delivers NOTIFY
 
@@ -21,6 +21,7 @@ API process (no camera / Hailo)
 - PostgreSQL tables remain the durable source of truth.
 - LISTEN/NOTIFY is ephemeral live delivery only.
 - No `timeline_events` table, queue table, or durable stream store.
+- No second WebSocket endpoint for spatial events.
 
 ## PostgreSQL LISTEN/NOTIFY
 
@@ -53,9 +54,21 @@ Full `TimelineEvent` bodies are **not** sent through PostgreSQL.
 | `entity_created` | `entity-created:{entity_id}` |
 | `entity_closed` | `entity-closed:{entity_id}` |
 | `observation_recorded` | `observation:{observation_id}` |
+| `zone_entered` | `zone-entered:{session_id}` |
+| `zone_exited` | `zone-exited:{session_id}` |
+| `zone_occupancy_changed` | `zone-occupancy:{session_id}:entered` / `:exited` |
 
+Default WebSocket subscription includes entity lifecycle **and** spatial types.
 Observation NOTIFY is **disabled by default** and per-entity throttled when
 enabled (`observation_notifications_enabled`, `observation_min_interval_seconds`).
+
+Subscription filters (AND across categories, OR within):
+
+- `event_types`
+- `camera_ids`
+- `entity_ids`
+- `entity_types`
+- `zone_ids` (v0.6.0; matches `payload.zone_id`)
 
 ## WebSocket
 

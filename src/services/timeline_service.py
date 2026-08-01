@@ -62,6 +62,7 @@ class TimelineService:
         event_type: list[str] | None = None,
         camera_id: str | None = None,
         entity_type: str | None = None,
+        zone_id: UUID | None = None,
         limit: int | None = None,
         cursor: str | None = None,
         sort: str = "desc",
@@ -69,9 +70,11 @@ class TimelineService:
     ) -> TimelinePage:
         """List timeline events with filters and cursor pagination.
 
-        Default ``event_type`` is lifecycle-only (``entity_created``,
-        ``entity_closed``). Observations appear only when
-        ``observation_recorded`` is requested explicitly.
+        Default ``event_type`` includes lifecycle events
+        (``entity_created``, ``entity_closed``) and spatial events
+        (``zone_entered``, ``zone_exited``, ``zone_occupancy_changed``).
+        Observations appear only when ``observation_recorded`` is requested
+        explicitly.
         """
 
         if require_entity and entity_id is not None:
@@ -95,6 +98,7 @@ class TimelineService:
             entity_id=entity_id,
             camera_id=camera_id.strip() if camera_id else None,
             entity_type=entity_type.strip() if entity_type else None,
+            zone_id=zone_id,
             limit=resolved_limit,
             cursor=decoded_cursor,
             sort=resolved_sort,

@@ -74,3 +74,14 @@ logging:
 runtime:
   platform: raspberry_pi_5
   application: jarvis-edge-ai
+
+# Spatial intelligence (v0.6.0)
+spatial:
+  enabled: true
+  position_strategy: bottom_center
+  enter_confirm_observations: 3
+  exit_confirm_observations: 3
+  lost_track_timeout_seconds: 15
+  maximum_zones_per_camera: 10
+  occupancy_stale_seconds: 60
+  publish_occupancy_changes: true

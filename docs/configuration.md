@@ -58,6 +58,14 @@ Unknown YAML sections or keys raise a configuration error.
 | `JARVIS_ACTIVITY_STREAM_MAX_CONNECTIONS` | `activity_stream.max_connections` |
 | `JARVIS_ACTIVITY_STREAM_RECONNECT_INITIAL_SECONDS` | `activity_stream.reconnect_initial_seconds` |
 | `JARVIS_ACTIVITY_STREAM_RECONNECT_MAX_SECONDS` | `activity_stream.reconnect_max_seconds` |
+| `JARVIS_SPATIAL_ENABLED` | `spatial.enabled` |
+| `JARVIS_SPATIAL_POSITION_STRATEGY` | `spatial.position_strategy` |
+| `JARVIS_SPATIAL_ENTER_CONFIRM_OBSERVATIONS` | `spatial.enter_confirm_observations` |
+| `JARVIS_SPATIAL_EXIT_CONFIRM_OBSERVATIONS` | `spatial.exit_confirm_observations` |
+| `JARVIS_SPATIAL_LOST_TRACK_TIMEOUT_SECONDS` | `spatial.lost_track_timeout_seconds` |
+| `JARVIS_SPATIAL_MAXIMUM_ZONES_PER_CAMERA` | `spatial.maximum_zones_per_camera` |
+| `JARVIS_SPATIAL_OCCUPANCY_STALE_SECONDS` | `spatial.occupancy_stale_seconds` |
+| `JARVIS_SPATIAL_PUBLISH_OCCUPANCY_CHANGES` | `spatial.publish_occupancy_changes` |
 | `JARVIS_LOG_LEVEL` | `logging.level` |
 | `JARVIS_LOG_FILE` | `logging.log_file` |
 | `JARVIS_RUNTIME_PLATFORM` | `runtime.platform` |

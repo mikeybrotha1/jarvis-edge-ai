@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 router = APIRouter(tags=["activity-stream"])
 
 PROTOCOL_VERSION = "1"
-STREAM_VERSION = "0.5.0"
+STREAM_VERSION = "0.6.0"
 
 CLOSE_SHUTDOWN = 1001
 CLOSE_INTERNAL = 1011
@@ -216,12 +216,14 @@ def _parse_subscription(filters: Any) -> ActivitySubscription:
     camera_ids = _parse_string_set(filters.get("camera_ids"), "camera_ids")
     entity_types = _parse_string_set(filters.get("entity_types"), "entity_types")
     entity_ids = _parse_uuid_set(filters.get("entity_ids"), "entity_ids")
+    zone_ids = _parse_uuid_set(filters.get("zone_ids"), "zone_ids")
 
     return ActivitySubscription(
         event_types=event_types,
         camera_ids=camera_ids,
         entity_ids=entity_ids,
         entity_types=entity_types,
+        zone_ids=zone_ids,
     )
 
 

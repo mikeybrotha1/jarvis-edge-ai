@@ -5,6 +5,9 @@
 const DEFAULT_LIFECYCLE = Object.freeze([
   "entity_created",
   "entity_closed",
+  "zone_entered",
+  "zone_exited",
+  "zone_occupancy_changed",
 ]);
 
 /**

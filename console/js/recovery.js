@@ -167,11 +167,18 @@ export function filtersFromUi(ui) {
   const event_types =
     Array.isArray(ui.event_types) && ui.event_types.length
       ? ui.event_types.slice()
-      : ["entity_created", "entity_closed"];
+      : [
+          "entity_created",
+          "entity_closed",
+          "zone_entered",
+          "zone_exited",
+          "zone_occupancy_changed",
+        ];
   return {
     event_types,
     camera_id: ui.camera_id || "",
     entity_type: ui.entity_type || "",
     entity_id: ui.entity_id || "",
+    zone_id: ui.zone_id || "",
   };
 }

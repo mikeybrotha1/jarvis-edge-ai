@@ -480,3 +480,90 @@ button:disabled {
     scroll-behavior: auto !important;
   }
 }
+
+/* Spatial intelligence (v0.6.0) */
+.zone-badge {
+  display: inline-block;
+  padding: 0.05rem 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--accent) 25%, transparent);
+  color: var(--accent);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.event-type.zone_entered,
+.event-type.zone_exited,
+.event-type.zone_occupancy_changed {
+  background: color-mix(in srgb, var(--ok) 20%, transparent);
+  color: var(--ok);
+}
+
+.zones-panel {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.zone-list,
+.zone-sessions,
+.occupancy-entities {
+  list-style: none;
+  margin: 0.5rem 0 0;
+  padding: 0;
+}
+
+.zone-list button {
+  width: 100%;
+  text-align: left;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius);
+  padding: 0.45rem 0.6rem;
+  margin-bottom: 0.35rem;
+  cursor: pointer;
+}
+
+.zone-list button[aria-pressed="true"] {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 1px var(--accent);
+}
+
+.zone-form {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 0.75rem;
+}
+
+.coord-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.4rem;
+}
+
+.zone-form-details summary {
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.occupancy-panel {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.6rem 0.75rem;
+  margin-bottom: 0.75rem;
+}
+
+.occupancy-title {
+  margin: 0 0 0.25rem;
+  font-weight: 600;
+}
+
+.zone-sessions li,
+.occupancy-entities li {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 0.25rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+}
