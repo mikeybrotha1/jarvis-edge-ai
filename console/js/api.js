@@ -1,0 +1,165 @@
+/**
+ * Same-origin REST helpers for the Jarvis public API.
+ * All dynamic values are treated as untrusted; query params are encoded.
+ */
+
+/**
+ * @typedef {object} ApiError
+ * @property {string} message
+ * @property {number|null} status
+ * @property {string} code
+ */
+
+/**
+ * @param {Response} response
+ * @returns {Promise<never>}
+ */
+async function rejectResponse(response) {
+  let detail = `Request failed (${response.status})`;
+  try {
+    const body = await response.json();
+    if (body && typeof body.detail === "string") {
+      detail = sanitizeMessage(body.detail);
+    } else if (body && Array.isArray(body.detail)) {
+      detail = "Validation error";
+    }
+  } catch {
+    // ignore non-JSON error bodies
+  }
+  /** @type {ApiError} */
+  const err = {
+    message: detail,
+    status: response.status,
+    code: "http_error",
+  };
+  throw err;
+}
+
+/**
+ * Strip control characters and truncate for UI display.
+ * @param {unknown} value
+ * @param {number} [max]
+ */
+export function sanitizeMessage(value, max = 240) {
+  const text = String(value ?? "")
+    .replace(/[\u0000-\u001f\u007f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+  if (!text) return "Unexpected error";
+  // Never surface credential-like material.
+  if (/password|secret|postgresql:\/\//i.test(text)) {
+    return "Request failed";
+  }
+  return text.length > max ? text.slice(0, max - 1) + "…" : text;
+}
+
+/**
+ * @param {string} path
+ * @param {Record<string, string|number|boolean|string[]|null|undefined>} [params]
+ */
+export function buildUrl(path, params = {}) {
+  const url = new URL(path, window.location.origin);
+  for (const [key, value] of Object.entries(params)) {
+    if (value == null || value === "") continue;
+    if (Array.isArray(value)) {
+      for (const item of value) {
+        if (item == null || item === "") continue;
+        url.searchParams.append(key, String(item));
+      }
+    } else if (typeof value === "boolean") {
+      url.searchParams.set(key, value ? "true" : "false");
+    } else {
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.pathname + url.search;
+}
+
+/**
+ * @param {string} path
+ * @param {Record<string, string|number|boolean|string[]|null|undefined>} [params]
+ */
+export async function apiGet(path, params = {}) {
+  const target = buildUrl(path, params);
+  let response;
+  try {
+    response = await fetch(target, {
+      method: "GET",
+      headers: { Accept: "application/json" },
+      credentials: "same-origin",
+    });
+  } catch {
+    /** @type {ApiError} */
+    const err = {
+      message: "Network error contacting API",
+      status: null,
+      code: "network_error",
+    };
+    throw err;
+  }
+  if (!response.ok) {
+    await rejectResponse(response);
+  }
+  return response.json();
+}
+
+export function getHealth() {
+  return apiGet("/health");
+}
+
+/**
+ * @param {object} filters
+ */
+export function getTimeline(filters = {}) {
+  const params = {
+    limit: filters.limit ?? 50,
+    sort: filters.sort ?? "desc",
+    cursor: filters.cursor ?? undefined,
+    camera_id: filters.camera_id || undefined,
+    entity_type: filters.entity_type || undefined,
+    entity_id: filters.entity_id || undefined,
+    occurred_after: filters.occurred_after || undefined,
+    occurred_before: filters.occurred_before || undefined,
+    event_type: filters.event_types || undefined,
+  };
+  return apiGet("/api/v1/timeline", params);
+}
+
+export function getActiveEntities(limit = 50) {
+  return apiGet("/api/v1/entities/active", { limit, sort: "desc" });
+}
+
+export function getRecentEntities(limit = 50) {
+  return apiGet("/api/v1/entities/recent", { limit });
+}
+
+/**
+ * @param {string} entityId
+ */
+export function getEntity(entityId) {
+  return apiGet(`/api/v1/entities/${encodeURIComponent(entityId)}`);
+}
+
+/**
+ * @param {string} entityId
+ * @param {object} [filters]
+ */
+export function getEntityObservations(entityId, filters = {}) {
+  return apiGet(`/api/v1/entities/${encodeURIComponent(entityId)}/observations`, {
+    limit: filters.limit ?? 50,
+    sort: filters.sort ?? "desc",
+  });
+}
+
+/**
+ * @param {string} entityId
+ * @param {object} [filters]
+ */
+export function getEntityTimeline(entityId, filters = {}) {
+  return apiGet(`/api/v1/entities/${encodeURIComponent(entityId)}/timeline`, {
+    limit: filters.limit ?? 50,
+    sort: filters.sort ?? "desc",
+    cursor: filters.cursor ?? undefined,
+    event_type: filters.event_types || undefined,
+  });
+}
