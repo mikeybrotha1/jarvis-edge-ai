@@ -326,6 +326,13 @@ def build_app_from_loaded_config(
 ) -> FastAPI:
     """Build the API app from an already-loaded ``AppConfig``.
 
+def build_app_from_loaded_config(
+    app_config: Any,
+    *,
+    create_schema: bool = False,
+) -> FastAPI:
+    """Build the API app from an already-loaded ``AppConfig``.
+
     Used by both ``python -m api`` and ``create_app_from_config`` so CLI and
     uvicorn factory paths wire activity_stream identically.
     """
