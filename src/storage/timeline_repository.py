@@ -11,9 +11,24 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import String, and_, cast, func, literal, or_, select, union_all
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    Float,
+    Integer,
+    String,
+    and_,
+    cast,
+    func,
+    literal,
+    null,
+    or_,
+    select,
+    union_all,
+)
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy.sql import Select
+from sqlalchemy.sql import ColumnElement, Select
+from sqlalchemy.sql.elements import Label, Null
 
 from storage.entity_orm import Entity, EntityObservation, EntityStatus
 from storage.sqlalchemy_db import session_scope
@@ -25,6 +40,140 @@ from storage.timeline_models import (
     TimelinePage,
 )
 from storage.zone_orm import EntityZoneSession, Zone, ZoneSessionStatus
+
+# Canonical UNION projection types (PostgreSQL requires matching types per
+# column position across every branch). Keep SQLite-compatible.
+_STR = String()
+_INT = Integer()
+_BIGINT = BigInteger()
+_FLOAT = Float()
+_DT = DateTime(timezone=True)
+
+# Ordered column names for the timeline UNION contract (regression tests).
+TIMELINE_UNION_COLUMN_NAMES: tuple[str, ...] = (
+    "event_id",
+    "event_type",
+    "occurred_at",
+    "source",
+    "entity_id",
+    "camera_id",
+    "entity_type",
+    "identity_key",
+    "track_id",
+    "status",
+    "confidence",
+    "frame_number",
+    "source_event_type",
+    "zone_id",
+    "zone_name",
+    "session_id",
+    "occupancy",
+)
+
+
+def _is_sql_null(value: Any) -> bool:
+    return isinstance(value, Null)
+
+
+def _typed_null(sql_type: Any, label: str) -> Label[Any]:
+    """Typed SQL NULL so PostgreSQL UNION branches share one type."""
+
+    return cast(null(), sql_type).label(label)
+
+
+def _typed_str(value: Any, label: str) -> Label[Any]:
+    """Cast strings / UUIDs / NULL to VARCHAR for a uniform UNION type."""
+
+    if _is_sql_null(value):
+        return cast(null(), _STR).label(label)
+    return cast(value, _STR).label(label)
+
+
+def _typed_int(value: Any, label: str) -> Label[Any]:
+    if _is_sql_null(value):
+        return cast(null(), _INT).label(label)
+    return cast(value, _INT).label(label)
+
+
+def _typed_bigint(value: Any, label: str) -> Label[Any]:
+    if _is_sql_null(value):
+        return cast(null(), _BIGINT).label(label)
+    return cast(value, _BIGINT).label(label)
+
+
+def _typed_float(value: Any, label: str) -> Label[Any]:
+    if _is_sql_null(value):
+        return cast(null(), _FLOAT).label(label)
+    return cast(value, _FLOAT).label(label)
+
+
+def _typed_dt(value: Any, label: str) -> Label[Any]:
+    """Label datetime columns; cast only SQL NULL (avoid SQLite result bugs)."""
+
+    if _is_sql_null(value):
+        return cast(null(), _DT).label(label)
+    # Real TIMESTAMP columns already have the correct type for both dialects.
+    return value.label(label)
+
+
+def _projection(
+    *,
+    event_id: Any,
+    event_type: Any,
+    occurred_at: Any,
+    source: Any,
+    entity_id: Any,
+    camera_id: Any,
+    entity_type: Any,
+    identity_key: Any,
+    track_id: Any,
+    status: Any,
+    confidence: Any,
+    frame_number: Any,
+    source_event_type: Any,
+    zone_id: Any,
+    zone_name: Any,
+    session_id: Any,
+    occupancy: Any,
+) -> tuple[ColumnElement[Any], ...]:
+    """Return the canonical typed column list for one UNION branch."""
+
+    return (
+        _typed_str(event_id, "event_id"),
+        _typed_str(event_type, "event_type"),
+        _typed_dt(occurred_at, "occurred_at"),
+        _typed_str(source, "source"),
+        _typed_str(entity_id, "entity_id"),
+        _typed_str(camera_id, "camera_id"),
+        _typed_str(entity_type, "entity_type"),
+        _typed_str(identity_key, "identity_key"),
+        _typed_bigint(track_id, "track_id"),
+        _typed_str(status, "status"),
+        _typed_float(confidence, "confidence"),
+        _typed_bigint(frame_number, "frame_number"),
+        _typed_str(source_event_type, "source_event_type"),
+        _typed_str(zone_id, "zone_id"),
+        _typed_str(zone_name, "zone_name"),
+        _typed_str(session_id, "session_id"),
+        _typed_int(occupancy, "occupancy"),
+    )
+
+
+def _null_projection_defaults() -> dict[str, Any]:
+    """Typed NULL expressions for optional projection columns."""
+
+    return {
+        "identity_key": null(),
+        "track_id": null(),
+        "status": null(),
+        "confidence": null(),
+        "frame_number": null(),
+        "source_event_type": null(),
+        "zone_id": null(),
+        "zone_name": null(),
+        "session_id": null(),
+        "occupancy": null(),
+    }
 
 
 class TimelineRepository:
@@ -150,23 +299,16 @@ class TimelineRepository:
 
         if not branches:
             empty = select(
-                literal("").label("event_id"),
-                literal("").label("event_type"),
-                literal(None).label("occurred_at"),
-                literal("").label("source"),
-                literal("").label("entity_id"),
-                literal(None).label("camera_id"),
-                literal("").label("entity_type"),
-                literal(None).label("identity_key"),
-                literal(None).label("track_id"),
-                literal(None).label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                literal(None).label("zone_id"),
-                literal(None).label("zone_name"),
-                literal(None).label("session_id"),
-                literal(None).label("occupancy"),
+                *_projection(
+                    event_id=literal(""),
+                    event_type=literal(""),
+                    occurred_at=null(),
+                    source=literal(""),
+                    entity_id=literal(""),
+                    camera_id=null(),
+                    entity_type=literal(""),
+                    **_null_projection_defaults(),
+                )
             ).where(literal(False))
             return empty.limit(0)
 
@@ -231,28 +373,29 @@ class TimelineRepository:
     def _created_select(self, filters: TimelineListFilter) -> Select[Any]:
         event_id = func.concat(
             literal("entity-created:"),
-            cast(Entity.id, String),
+            cast(Entity.id, _STR),
         )
+        nulls = _null_projection_defaults()
         statement = select(
-            event_id.label("event_id"),
-            literal(TimelineEventType.ENTITY_CREATED.value).label(
-                "event_type"
-            ),
-            Entity.first_seen.label("occurred_at"),
-            literal("entity").label("source"),
-            cast(Entity.id, String).label("entity_id"),
-            Entity.camera_id.label("camera_id"),
-            Entity.label.label("entity_type"),
-            Entity.identity_key.label("identity_key"),
-            Entity.track_id.label("track_id"),
-            literal("active").label("status"),
-            literal(None).label("confidence"),
-            literal(None).label("frame_number"),
-            literal(None).label("source_event_type"),
-            literal(None).label("zone_id"),
-            literal(None).label("zone_name"),
-            literal(None).label("session_id"),
-            literal(None).label("occupancy"),
+            *_projection(
+                event_id=event_id,
+                event_type=literal(TimelineEventType.ENTITY_CREATED.value),
+                occurred_at=Entity.first_seen,
+                source=literal("entity"),
+                entity_id=Entity.id,
+                camera_id=Entity.camera_id,
+                entity_type=Entity.label,
+                identity_key=Entity.identity_key,
+                track_id=Entity.track_id,
+                status=literal("active"),
+                confidence=nulls["confidence"],
+                frame_number=nulls["frame_number"],
+                source_event_type=nulls["source_event_type"],
+                zone_id=nulls["zone_id"],
+                zone_name=nulls["zone_name"],
+                session_id=nulls["session_id"],
+                occupancy=nulls["occupancy"],
+            )
         ).select_from(Entity)
 
         return self._apply_entity_filters(
@@ -267,29 +410,30 @@ class TimelineRepository:
     def _closed_select(self, filters: TimelineListFilter) -> Select[Any]:
         event_id = func.concat(
             literal("entity-closed:"),
-            cast(Entity.id, String),
+            cast(Entity.id, _STR),
         )
+        nulls = _null_projection_defaults()
         statement = (
             select(
-                event_id.label("event_id"),
-                literal(TimelineEventType.ENTITY_CLOSED.value).label(
-                    "event_type"
-                ),
-                Entity.last_seen.label("occurred_at"),
-                literal("entity").label("source"),
-                cast(Entity.id, String).label("entity_id"),
-                Entity.camera_id.label("camera_id"),
-                Entity.label.label("entity_type"),
-                Entity.identity_key.label("identity_key"),
-                Entity.track_id.label("track_id"),
-                literal("closed").label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                literal(None).label("zone_id"),
-                literal(None).label("zone_name"),
-                literal(None).label("session_id"),
-                literal(None).label("occupancy"),
+                *_projection(
+                    event_id=event_id,
+                    event_type=literal(TimelineEventType.ENTITY_CLOSED.value),
+                    occurred_at=Entity.last_seen,
+                    source=literal("entity"),
+                    entity_id=Entity.id,
+                    camera_id=Entity.camera_id,
+                    entity_type=Entity.label,
+                    identity_key=Entity.identity_key,
+                    track_id=Entity.track_id,
+                    status=literal("closed"),
+                    confidence=nulls["confidence"],
+                    frame_number=nulls["frame_number"],
+                    source_event_type=nulls["source_event_type"],
+                    zone_id=nulls["zone_id"],
+                    zone_name=nulls["zone_name"],
+                    session_id=nulls["session_id"],
+                    occupancy=nulls["occupancy"],
+                )
             )
             .select_from(Entity)
             .where(Entity.status == EntityStatus.CLOSED)
@@ -307,28 +451,31 @@ class TimelineRepository:
     def _observation_select(self, filters: TimelineListFilter) -> Select[Any]:
         event_id = func.concat(
             literal("observation:"),
-            cast(EntityObservation.id, String),
+            cast(EntityObservation.id, _STR),
         )
+        nulls = _null_projection_defaults()
         statement = select(
-            event_id.label("event_id"),
-            literal(TimelineEventType.OBSERVATION_RECORDED.value).label(
-                "event_type"
-            ),
-            EntityObservation.observed_at.label("occurred_at"),
-            literal("observation").label("source"),
-            cast(EntityObservation.entity_id, String).label("entity_id"),
-            EntityObservation.camera_id.label("camera_id"),
-            EntityObservation.label.label("entity_type"),
-            literal(None).label("identity_key"),
-            EntityObservation.track_id.label("track_id"),
-            literal(None).label("status"),
-            EntityObservation.confidence.label("confidence"),
-            EntityObservation.frame_number.label("frame_number"),
-            EntityObservation.source_event_type.label("source_event_type"),
-            literal(None).label("zone_id"),
-            literal(None).label("zone_name"),
-            literal(None).label("session_id"),
-            literal(None).label("occupancy"),
+            *_projection(
+                event_id=event_id,
+                event_type=literal(
+                    TimelineEventType.OBSERVATION_RECORDED.value
+                ),
+                occurred_at=EntityObservation.observed_at,
+                source=literal("observation"),
+                entity_id=EntityObservation.entity_id,
+                camera_id=EntityObservation.camera_id,
+                entity_type=EntityObservation.label,
+                identity_key=nulls["identity_key"],
+                track_id=EntityObservation.track_id,
+                status=nulls["status"],
+                confidence=EntityObservation.confidence,
+                frame_number=EntityObservation.frame_number,
+                source_event_type=EntityObservation.source_event_type,
+                zone_id=nulls["zone_id"],
+                zone_name=nulls["zone_name"],
+                session_id=nulls["session_id"],
+                occupancy=nulls["occupancy"],
+            )
         ).select_from(EntityObservation)
 
         if filters.entity_id is not None:
@@ -356,29 +503,30 @@ class TimelineRepository:
     def _zone_entered_select(self, filters: TimelineListFilter) -> Select[Any]:
         event_id = func.concat(
             literal("zone-entered:"),
-            cast(EntityZoneSession.id, String),
+            cast(EntityZoneSession.id, _STR),
         )
+        nulls = _null_projection_defaults()
         statement = (
             select(
-                event_id.label("event_id"),
-                literal(TimelineEventType.ZONE_ENTERED.value).label(
-                    "event_type"
-                ),
-                EntityZoneSession.entered_at.label("occurred_at"),
-                literal("spatial").label("source"),
-                cast(EntityZoneSession.entity_id, String).label("entity_id"),
-                EntityZoneSession.camera_id.label("camera_id"),
-                Entity.label.label("entity_type"),
-                literal(None).label("identity_key"),
-                Entity.track_id.label("track_id"),
-                literal(None).label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                cast(EntityZoneSession.zone_id, String).label("zone_id"),
-                Zone.name.label("zone_name"),
-                cast(EntityZoneSession.id, String).label("session_id"),
-                EntityZoneSession.occupancy_after_enter.label("occupancy"),
+                *_projection(
+                    event_id=event_id,
+                    event_type=literal(TimelineEventType.ZONE_ENTERED.value),
+                    occurred_at=EntityZoneSession.entered_at,
+                    source=literal("spatial"),
+                    entity_id=EntityZoneSession.entity_id,
+                    camera_id=EntityZoneSession.camera_id,
+                    entity_type=Entity.label,
+                    identity_key=nulls["identity_key"],
+                    track_id=Entity.track_id,
+                    status=nulls["status"],
+                    confidence=nulls["confidence"],
+                    frame_number=nulls["frame_number"],
+                    source_event_type=nulls["source_event_type"],
+                    zone_id=EntityZoneSession.zone_id,
+                    zone_name=Zone.name,
+                    session_id=EntityZoneSession.id,
+                    occupancy=EntityZoneSession.occupancy_after_enter,
+                )
             )
             .select_from(EntityZoneSession)
             .join(Zone, Zone.id == EntityZoneSession.zone_id)
@@ -393,29 +541,30 @@ class TimelineRepository:
     def _zone_exited_select(self, filters: TimelineListFilter) -> Select[Any]:
         event_id = func.concat(
             literal("zone-exited:"),
-            cast(EntityZoneSession.id, String),
+            cast(EntityZoneSession.id, _STR),
         )
+        nulls = _null_projection_defaults()
         statement = (
             select(
-                event_id.label("event_id"),
-                literal(TimelineEventType.ZONE_EXITED.value).label(
-                    "event_type"
-                ),
-                EntityZoneSession.exited_at.label("occurred_at"),
-                literal("spatial").label("source"),
-                cast(EntityZoneSession.entity_id, String).label("entity_id"),
-                EntityZoneSession.camera_id.label("camera_id"),
-                Entity.label.label("entity_type"),
-                literal(None).label("identity_key"),
-                Entity.track_id.label("track_id"),
-                literal(None).label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                cast(EntityZoneSession.zone_id, String).label("zone_id"),
-                Zone.name.label("zone_name"),
-                cast(EntityZoneSession.id, String).label("session_id"),
-                EntityZoneSession.occupancy_after_exit.label("occupancy"),
+                *_projection(
+                    event_id=event_id,
+                    event_type=literal(TimelineEventType.ZONE_EXITED.value),
+                    occurred_at=EntityZoneSession.exited_at,
+                    source=literal("spatial"),
+                    entity_id=EntityZoneSession.entity_id,
+                    camera_id=EntityZoneSession.camera_id,
+                    entity_type=Entity.label,
+                    identity_key=nulls["identity_key"],
+                    track_id=Entity.track_id,
+                    status=nulls["status"],
+                    confidence=nulls["confidence"],
+                    frame_number=nulls["frame_number"],
+                    source_event_type=nulls["source_event_type"],
+                    zone_id=EntityZoneSession.zone_id,
+                    zone_name=Zone.name,
+                    session_id=EntityZoneSession.id,
+                    occupancy=EntityZoneSession.occupancy_after_exit,
+                )
             )
             .select_from(EntityZoneSession)
             .join(Zone, Zone.id == EntityZoneSession.zone_id)
@@ -435,30 +584,33 @@ class TimelineRepository:
     ) -> Select[Any]:
         event_id = func.concat(
             literal("zone-occupancy:"),
-            cast(EntityZoneSession.id, String),
+            cast(EntityZoneSession.id, _STR),
             literal(":entered"),
         )
+        nulls = _null_projection_defaults()
         statement = (
             select(
-                event_id.label("event_id"),
-                literal(TimelineEventType.ZONE_OCCUPANCY_CHANGED.value).label(
-                    "event_type"
-                ),
-                EntityZoneSession.entered_at.label("occurred_at"),
-                literal("spatial").label("source"),
-                cast(EntityZoneSession.entity_id, String).label("entity_id"),
-                EntityZoneSession.camera_id.label("camera_id"),
-                Entity.label.label("entity_type"),
-                literal(None).label("identity_key"),
-                Entity.track_id.label("track_id"),
-                literal("entered").label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                cast(EntityZoneSession.zone_id, String).label("zone_id"),
-                Zone.name.label("zone_name"),
-                cast(EntityZoneSession.id, String).label("session_id"),
-                EntityZoneSession.occupancy_after_enter.label("occupancy"),
+                *_projection(
+                    event_id=event_id,
+                    event_type=literal(
+                        TimelineEventType.ZONE_OCCUPANCY_CHANGED.value
+                    ),
+                    occurred_at=EntityZoneSession.entered_at,
+                    source=literal("spatial"),
+                    entity_id=EntityZoneSession.entity_id,
+                    camera_id=EntityZoneSession.camera_id,
+                    entity_type=Entity.label,
+                    identity_key=nulls["identity_key"],
+                    track_id=Entity.track_id,
+                    status=literal("entered"),
+                    confidence=nulls["confidence"],
+                    frame_number=nulls["frame_number"],
+                    source_event_type=nulls["source_event_type"],
+                    zone_id=EntityZoneSession.zone_id,
+                    zone_name=Zone.name,
+                    session_id=EntityZoneSession.id,
+                    occupancy=EntityZoneSession.occupancy_after_enter,
+                )
             )
             .select_from(EntityZoneSession)
             .join(Zone, Zone.id == EntityZoneSession.zone_id)
@@ -476,30 +628,33 @@ class TimelineRepository:
     ) -> Select[Any]:
         event_id = func.concat(
             literal("zone-occupancy:"),
-            cast(EntityZoneSession.id, String),
+            cast(EntityZoneSession.id, _STR),
             literal(":exited"),
         )
+        nulls = _null_projection_defaults()
         statement = (
             select(
-                event_id.label("event_id"),
-                literal(TimelineEventType.ZONE_OCCUPANCY_CHANGED.value).label(
-                    "event_type"
-                ),
-                EntityZoneSession.exited_at.label("occurred_at"),
-                literal("spatial").label("source"),
-                cast(EntityZoneSession.entity_id, String).label("entity_id"),
-                EntityZoneSession.camera_id.label("camera_id"),
-                Entity.label.label("entity_type"),
-                literal(None).label("identity_key"),
-                Entity.track_id.label("track_id"),
-                literal("exited").label("status"),
-                literal(None).label("confidence"),
-                literal(None).label("frame_number"),
-                literal(None).label("source_event_type"),
-                cast(EntityZoneSession.zone_id, String).label("zone_id"),
-                Zone.name.label("zone_name"),
-                cast(EntityZoneSession.id, String).label("session_id"),
-                EntityZoneSession.occupancy_after_exit.label("occupancy"),
+                *_projection(
+                    event_id=event_id,
+                    event_type=literal(
+                        TimelineEventType.ZONE_OCCUPANCY_CHANGED.value
+                    ),
+                    occurred_at=EntityZoneSession.exited_at,
+                    source=literal("spatial"),
+                    entity_id=EntityZoneSession.entity_id,
+                    camera_id=EntityZoneSession.camera_id,
+                    entity_type=Entity.label,
+                    identity_key=nulls["identity_key"],
+                    track_id=Entity.track_id,
+                    status=literal("exited"),
+                    confidence=nulls["confidence"],
+                    frame_number=nulls["frame_number"],
+                    source_event_type=nulls["source_event_type"],
+                    zone_id=EntityZoneSession.zone_id,
+                    zone_name=Zone.name,
+                    session_id=EntityZoneSession.id,
+                    occupancy=EntityZoneSession.occupancy_after_exit,
+                )
             )
             .select_from(EntityZoneSession)
             .join(Zone, Zone.id == EntityZoneSession.zone_id)
