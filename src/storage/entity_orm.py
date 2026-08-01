@@ -167,6 +167,11 @@ class Entity(Base):
         Index("ix_entities_identity_key", "identity_key"),
         Index("ix_entities_status_last_seen", "status", "last_seen"),
         Index("ix_entities_label", "label"),
+        # Timeline projection access paths (v0.4.2)
+        Index("ix_entities_first_seen_id", "first_seen", "id"),
+        Index("ix_entities_status_last_seen_id", "status", "last_seen", "id"),
+        Index("ix_entities_camera_first_seen_id", "camera_id", "first_seen", "id"),
+        Index("ix_entities_camera_last_seen_id", "camera_id", "last_seen", "id"),
     )
 
 
@@ -230,6 +235,24 @@ class EntityObservation(Base):
         ),
         Index("ix_entity_observations_frame_number", "frame_number"),
         Index("ix_entity_observations_source_event_id", "source_event_id"),
+        # Timeline projection access paths (v0.4.2)
+        Index(
+            "ix_entity_observations_observed_at_id",
+            "observed_at",
+            "id",
+        ),
+        Index(
+            "ix_entity_observations_entity_observed_id",
+            "entity_id",
+            "observed_at",
+            "id",
+        ),
+        Index(
+            "ix_entity_observations_camera_observed_id",
+            "camera_id",
+            "observed_at",
+            "id",
+        ),
     )
 
 

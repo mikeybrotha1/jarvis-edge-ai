@@ -11,6 +11,7 @@ from config.models import (
     LoggingConfig,
     MemoryConfig,
     RuntimeConfig,
+    TimelineConfig,
 )
 
 __all__ = [
@@ -24,5 +25,6 @@ __all__ = [
     "LoggingConfig",
     "MemoryConfig",
     "RuntimeConfig",
+    "TimelineConfig",
     "load_app_config",
 ]

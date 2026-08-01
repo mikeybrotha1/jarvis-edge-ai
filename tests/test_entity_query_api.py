@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 
 from api.app import create_app
 from services.entity_query_service import EntityQueryService, QueryLimits
+from services.timeline_service import TimelineLimits, TimelineService
 from storage.entity_orm import EntityStatus
 from storage.entity_records import EntityCreate, ObservationCreate
 from storage.entity_repository import EntityRepository
@@ -18,6 +19,7 @@ from storage.sqlalchemy_db import (
     create_entity_schema,
     create_session_factory,
 )
+from storage.timeline_repository import TimelineRepository
 
 
 def _build_client():
@@ -36,7 +38,15 @@ def _build_client():
             observation_maximum_limit=500,
         ),
     )
-    app = create_app(query_service=service)
+    timeline = TimelineService(
+        TimelineRepository(factory),
+        entities,
+        limits=TimelineLimits(),
+    )
+    app = create_app(
+        query_service=service,
+        timeline_service=timeline,
+    )
     client = TestClient(app)
     return client, entities, observations
 

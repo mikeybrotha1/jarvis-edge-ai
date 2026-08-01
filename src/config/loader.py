@@ -26,6 +26,7 @@ from config.models import (
     LoggingConfig,
     MemoryConfig,
     RuntimeConfig,
+    TimelineConfig,
 )
 
 
@@ -62,6 +63,12 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "enabled",
             "host",
             "port",
+            "default_limit",
+            "maximum_limit",
+        }
+    ),
+    "timeline": frozenset(
+        {
             "default_limit",
             "maximum_limit",
         }
@@ -172,6 +179,10 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "port": defaults.api.port,
             "default_limit": defaults.api.default_limit,
             "maximum_limit": defaults.api.maximum_limit,
+        },
+        "timeline": {
+            "default_limit": defaults.timeline.default_limit,
+            "maximum_limit": defaults.timeline.maximum_limit,
         },
         "logging": {
             "level": defaults.logging.level,
@@ -415,6 +426,20 @@ def _apply_env_overrides(
         environ,
         "JARVIS_API_MAXIMUM_LIMIT",
     )
+    _set_env_int(
+        values,
+        "timeline",
+        "default_limit",
+        environ,
+        "JARVIS_TIMELINE_DEFAULT_LIMIT",
+    )
+    _set_env_int(
+        values,
+        "timeline",
+        "maximum_limit",
+        environ,
+        "JARVIS_TIMELINE_MAXIMUM_LIMIT",
+    )
     _set_env_string(
         values,
         "logging",
@@ -633,6 +658,31 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "api.default_limit cannot exceed api.maximum_limit."
         )
 
+    timeline_default_limit = values["timeline"]["default_limit"]
+    if (
+        not _is_int(timeline_default_limit)
+        or int(timeline_default_limit) < 1
+    ):
+        errors.append(
+            "timeline.default_limit must be an integer >= 1."
+        )
+
+    timeline_maximum_limit = values["timeline"]["maximum_limit"]
+    if (
+        not _is_int(timeline_maximum_limit)
+        or int(timeline_maximum_limit) < 1
+    ):
+        errors.append(
+            "timeline.maximum_limit must be an integer >= 1."
+        )
+    elif (
+        _is_int(timeline_default_limit)
+        and int(timeline_default_limit) > int(timeline_maximum_limit)
+    ):
+        errors.append(
+            "timeline.default_limit cannot exceed timeline.maximum_limit."
+        )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -720,6 +770,10 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             port=int(values["api"]["port"]),
             default_limit=int(values["api"]["default_limit"]),
             maximum_limit=int(values["api"]["maximum_limit"]),
+        ),
+        timeline=TimelineConfig(
+            default_limit=int(values["timeline"]["default_limit"]),
+            maximum_limit=int(values["timeline"]["maximum_limit"]),
         ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),

@@ -47,6 +47,8 @@ Unknown YAML sections or keys raise a configuration error.
 | `JARVIS_API_PORT` | `api.port` |
 | `JARVIS_API_DEFAULT_LIMIT` | `api.default_limit` |
 | `JARVIS_API_MAXIMUM_LIMIT` | `api.maximum_limit` |
+| `JARVIS_TIMELINE_DEFAULT_LIMIT` | `timeline.default_limit` |
+| `JARVIS_TIMELINE_MAXIMUM_LIMIT` | `timeline.maximum_limit` |
 | `JARVIS_LOG_LEVEL` | `logging.level` |
 | `JARVIS_LOG_FILE` | `logging.log_file` |
 | `JARVIS_RUNTIME_PLATFORM` | `runtime.platform` |
@@ -76,6 +78,7 @@ Scripts that use `load_database_settings()` still read **only**
 | Memory | source `vision_memory`, IoU `0.30`, max missed frames `8` |
 | Entity memory | strategy `tracker_id`, snapshot interval `0.0` (no throttle), `snapshot_on_update` true |
 | API | disabled, host `0.0.0.0`, port `8080`, default limit `50`, maximum limit `200` |
+| Timeline | default limit `50`, maximum limit `200` |
 | Logging | level `INFO`, file `logs/jarvis.log` |
 | Runtime | platform `raspberry_pi_5`, application `jarvis-edge-ai` |
 

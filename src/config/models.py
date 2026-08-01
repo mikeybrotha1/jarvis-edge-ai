@@ -79,6 +79,14 @@ class ApiConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class TimelineConfig:
+    """Activity timeline query settings (v0.4.2)."""
+
+    default_limit: int = 50
+    maximum_limit: int = 200
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -106,5 +114,6 @@ class AppConfig:
         default_factory=EntityMemoryConfig
     )
     api: ApiConfig = field(default_factory=ApiConfig)
+    timeline: TimelineConfig = field(default_factory=TimelineConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

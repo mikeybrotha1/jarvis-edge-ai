@@ -50,6 +50,11 @@ api:
   default_limit: 50
   maximum_limit: 200
 
+# Activity timeline query (v0.4.2)
+timeline:
+  default_limit: 50
+  maximum_limit: 200
+
 logging:
   level: INFO
   log_file: logs/jarvis.log
