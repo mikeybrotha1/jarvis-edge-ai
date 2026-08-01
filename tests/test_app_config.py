@@ -49,6 +49,8 @@ class AppConfigTests(unittest.TestCase):
         self.assertEqual(cfg.api.port, 8080)
         self.assertEqual(cfg.api.default_limit, 50)
         self.assertEqual(cfg.api.maximum_limit, 200)
+        self.assertEqual(cfg.timeline.default_limit, 50)
+        self.assertEqual(cfg.timeline.maximum_limit, 200)
         self.assertEqual(cfg.logging.level, "INFO")
         self.assertEqual(cfg.logging.log_file, "logs/jarvis.log")
         self.assertEqual(cfg.runtime.platform, "raspberry_pi_5")
