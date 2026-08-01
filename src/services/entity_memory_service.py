@@ -44,7 +44,9 @@ from storage.entity_records import (
     EntityRecord,
     EntityUpdate,
     ObservationCreate,
+    ObservationRecord,
 )
+from storage.activity_notify import ActivityNotificationPublisher
 from storage.entity_repository import EntityRepository
 from storage.observation_repository import ObservationRepository
 from storage.sqlalchemy_db import session_scope
@@ -72,6 +74,7 @@ class EntityMemoryService:
         process_inline: bool = False,
         snapshot_min_interval_seconds: float = 0.0,
         snapshot_on_update: bool = True,
+        activity_publisher: ActivityNotificationPublisher | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         if snapshot_min_interval_seconds < 0:
@@ -94,6 +97,7 @@ class EntityMemoryService:
             snapshot_min_interval_seconds
         )
         self._snapshot_on_update = bool(snapshot_on_update)
+        self._activity_publisher = activity_publisher
         self._logger = logger or logging.getLogger(__name__)
 
         # Last intermediate snapshot time per entity (throttling).
@@ -450,7 +454,10 @@ class EntityMemoryService:
         closing: bool,
         session: Session | None,
     ) -> None:
-        self._record_observation(
+        # Capture first_seen before close mutates aggregate state.
+        created_at = entity.first_seen
+
+        obs_record = self._record_observation(
             entity,
             observation,
             source_event_type=event.event_type.value,
@@ -492,6 +499,28 @@ class EntityMemoryService:
                 ]
             elif reason == "closed":
                 self._last_update_snapshot_at.pop(entity.id, None)
+
+        # Live activity notifications (same transaction as durable writes).
+        if session is not None and self._activity_publisher is not None:
+            if created:
+                self._activity_publisher.publish_entity_created(
+                    session,
+                    entity_id=entity.id,
+                    occurred_at=created_at,
+                )
+            if closing:
+                self._activity_publisher.publish_entity_closed(
+                    session,
+                    entity_id=entity.id,
+                    occurred_at=entity.last_seen,
+                )
+            if obs_record is not None:
+                self._activity_publisher.publish_observation_recorded(
+                    session,
+                    observation_id=obs_record.id,
+                    entity_id=entity.id,
+                    occurred_at=obs_record.observed_at,
+                )
 
         self._publish_entity_event(
             event_type,
@@ -537,8 +566,8 @@ class EntityMemoryService:
         identity: IdentityMatch,
         parent_event: JarvisEvent,
         session: Session | None,
-    ) -> None:
-        self._observations.append(
+    ) -> ObservationRecord | None:
+        record, created = self._observations.append(
             ObservationCreate(
                 entity_id=entity.id,
                 observed_at=observation["observed_at"],
@@ -560,6 +589,7 @@ class EntityMemoryService:
             ),
             session=session,
         )
+        return record if created else None
 
     def _entity_create(
         self,

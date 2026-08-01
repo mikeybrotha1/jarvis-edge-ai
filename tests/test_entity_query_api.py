@@ -46,6 +46,7 @@ def _build_client():
     app = create_app(
         query_service=service,
         timeline_service=timeline,
+        enable_activity_stream=False,
     )
     client = TestClient(app)
     return client, entities, observations

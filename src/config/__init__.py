@@ -2,6 +2,7 @@
 
 from config.loader import ConfigurationError, load_app_config
 from config.models import (
+    ActivityStreamConfig,
     ApiConfig,
     AppConfig,
     CameraConfig,
@@ -15,6 +16,7 @@ from config.models import (
 )
 
 __all__ = [
+    "ActivityStreamConfig",
     "ApiConfig",
     "AppConfig",
     "CameraConfig",

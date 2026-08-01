@@ -87,6 +87,21 @@ class TimelineConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ActivityStreamConfig:
+    """Real-time WebSocket activity stream settings (v0.5.0)."""
+
+    enabled: bool = True
+    notify_channel: str = "jarvis_activity"
+    observation_notifications_enabled: bool = False
+    observation_min_interval_seconds: float = 1.0
+    client_queue_size: int = 100
+    heartbeat_interval_seconds: float = 20.0
+    max_connections: int = 25
+    reconnect_initial_seconds: float = 1.0
+    reconnect_max_seconds: float = 30.0
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -115,5 +130,8 @@ class AppConfig:
     )
     api: ApiConfig = field(default_factory=ApiConfig)
     timeline: TimelineConfig = field(default_factory=TimelineConfig)
+    activity_stream: ActivityStreamConfig = field(
+        default_factory=ActivityStreamConfig
+    )
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

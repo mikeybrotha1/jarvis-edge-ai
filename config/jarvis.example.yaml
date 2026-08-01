@@ -55,6 +55,18 @@ timeline:
   default_limit: 50
   maximum_limit: 200
 
+# Real-time WebSocket activity stream (v0.5.0)
+activity_stream:
+  enabled: true
+  notify_channel: jarvis_activity
+  observation_notifications_enabled: false
+  observation_min_interval_seconds: 1.0
+  client_queue_size: 100
+  heartbeat_interval_seconds: 20.0
+  max_connections: 25
+  reconnect_initial_seconds: 1.0
+  reconnect_max_seconds: 30.0
+
 logging:
   level: INFO
   log_file: logs/jarvis.log

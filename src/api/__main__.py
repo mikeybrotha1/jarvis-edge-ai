@@ -15,12 +15,11 @@ Or with uvicorn:
 from __future__ import annotations
 
 import logging
-import sys
 
 import uvicorn
 
+from api.app import build_app_from_loaded_config
 from config import load_app_config
-from services.entity_query_service import QueryLimits
 
 
 def main() -> int:
@@ -38,24 +37,14 @@ def main() -> int:
             "was invoked explicitly."
         )
 
-    limits = QueryLimits(
-        entity_default_limit=app_config.api.default_limit,
-        entity_maximum_limit=app_config.api.maximum_limit,
-    )
-
-    # Late import so config validation happens first.
-    from api.app import create_app
-
-    application = create_app(
-        database_url=app_config.database.url,
-        limits=limits,
-        create_schema=False,
-    )
+    application = build_app_from_loaded_config(app_config)
 
     logger.info(
-        "Starting entity query API on %s:%s",
+        "Starting entity query API on %s:%s "
+        "(activity_stream_enabled=%s)",
         app_config.api.host,
         app_config.api.port,
+        getattr(application.state, "activity_stream_enabled", False),
     )
 
     uvicorn.run(

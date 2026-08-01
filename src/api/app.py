@@ -1,4 +1,4 @@
-"""FastAPI application factory for the entity query API.
+"""FastAPI application factory for the entity query and activity APIs.
 
 The API is intentionally independent of camera / Hailo hardware. It only
 requires a database connection and the entity-memory repositories.
@@ -16,9 +16,12 @@ from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from api.activity_ws import router as activity_ws_router
 from api.entity_routes import router as entity_router
 from api.schemas import HealthOut
 from api.timeline_routes import entity_timeline_router, router as timeline_router
+from services.activity_listener import ActivityNotificationListener
+from services.activity_stream import ActivityStreamBroker
 from services.entity_query_service import EntityQueryService, QueryLimits
 from services.timeline_service import TimelineLimits, TimelineService
 from storage.entity_repository import EntityRepository
@@ -41,29 +44,14 @@ def create_app(
     database_url: str | None = None,
     limits: QueryLimits | None = None,
     timeline_limits: TimelineLimits | None = None,
+    activity_stream_config: Any | None = None,
+    activity_broker: ActivityStreamBroker | None = None,
+    activity_listener: ActivityNotificationListener | None = None,
+    enable_activity_stream: bool | None = None,
     create_schema: bool = False,
     title: str = "Jarvis Edge AI Entity Query API",
 ) -> FastAPI:
-    """Build a FastAPI app with injectable query dependencies.
-
-    Parameters
-    ----------
-    query_service:
-        Optional pre-built entity query service (tests inject this).
-    timeline_service:
-        Optional pre-built timeline service (tests inject this).
-    session_factory:
-        Optional SQLAlchemy session factory. Used when services are omitted.
-    database_url:
-        Optional PostgreSQL / SQLite URL used to build engine + session
-        factory when neither service nor factory is provided.
-    limits:
-        Pagination defaults and maxima for the entity query service.
-    timeline_limits:
-        Pagination defaults and maxima for the timeline service.
-    create_schema:
-        When True, create entity-memory tables on startup (test convenience).
-    """
+    """Build a FastAPI app with injectable query and activity-stream deps."""
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):  # type: ignore[no-untyped-def]
@@ -72,8 +60,54 @@ def create_app(
             raise RuntimeError("EntityQueryService was not initialised.")
         if getattr(app.state, "timeline_service", None) is None:
             raise RuntimeError("TimelineService was not initialised.")
-        logger.info("Entity query and timeline API ready")
+
+        listener: ActivityNotificationListener | None = getattr(
+            app.state,
+            "activity_listener",
+            None,
+        )
+        broker: ActivityStreamBroker | None = getattr(
+            app.state,
+            "activity_broker",
+            None,
+        )
+        stream_enabled = bool(
+            getattr(app.state, "activity_stream_enabled", False)
+        )
+        app.state.activity_stream_ready = False
+
+        if stream_enabled and listener is not None:
+            try:
+                await listener.start()
+                ready = await listener.wait_until_ready(timeout=10.0)
+                app.state.activity_stream_ready = ready
+                if ready:
+                    logger.info("Activity stream LISTEN ready")
+                else:
+                    logger.warning(
+                        "Activity stream listener did not become ready in time"
+                    )
+            except Exception:
+                logger.exception("Failed to start activity stream listener")
+                app.state.activity_stream_ready = False
+        elif stream_enabled and broker is not None:
+            # Test/SQLite mode: broker-only fan-out without LISTEN.
+            app.state.activity_stream_ready = True
+            logger.info("Activity stream broker ready (no LISTEN connection)")
+        else:
+            logger.info(
+                "Entity query API ready (activity_stream_enabled=%s)",
+                stream_enabled,
+            )
+
         yield
+
+        if broker is not None:
+            await broker.close_all(code=1001, reason="server shutdown")
+
+        if listener is not None:
+            await listener.stop()
+
         engine = getattr(app.state, "engine", None)
         if engine is not None:
             engine.dispose()
@@ -81,7 +115,7 @@ def create_app(
 
     app = FastAPI(
         title=title,
-        version="0.4.2",
+        version="0.5.0",
         lifespan=lifespan,
     )
 
@@ -89,6 +123,7 @@ def create_app(
     resolved_timeline = timeline_service
     engine = None
     factory = session_factory
+    resolved_db_url = database_url
 
     if resolved_service is None or resolved_timeline is None:
         if factory is None:
@@ -132,11 +167,64 @@ def create_app(
     app.state.limits = limits or QueryLimits()
     app.state.timeline_limits = timeline_limits or TimelineLimits()
 
-    # Static entity paths (/active, /recent) are registered first inside
-    # entity_router; timeline entity-scoped route coexists under the same prefix.
+    # Activity stream wiring (optional; REST works without it).
+    stream_cfg = activity_stream_config
+    stream_enabled = (
+        bool(stream_cfg.enabled)
+        if stream_cfg is not None
+        else bool(enable_activity_stream)
+    )
+    app.state.activity_stream_config = stream_cfg
+    app.state.activity_stream_enabled = stream_enabled
+
+    broker = activity_broker
+    if stream_enabled and broker is None:
+        queue_size = (
+            int(stream_cfg.client_queue_size) if stream_cfg else 100
+        )
+        max_conn = int(stream_cfg.max_connections) if stream_cfg else 25
+        broker = ActivityStreamBroker(
+            client_queue_size=queue_size,
+            max_connections=max_conn,
+            logger=logger,
+        )
+    app.state.activity_broker = broker
+
+    listener = activity_listener
+    if (
+        stream_enabled
+        and listener is None
+        and broker is not None
+        and resolved_db_url
+        and not str(resolved_db_url).startswith("sqlite")
+    ):
+        channel = (
+            stream_cfg.notify_channel if stream_cfg else "jarvis_activity"
+        )
+        listener = ActivityNotificationListener(
+            database_url=resolved_db_url,
+            channel=channel,
+            timeline_service=resolved_timeline,
+            broker=broker,
+            reconnect_initial_seconds=(
+                float(stream_cfg.reconnect_initial_seconds)
+                if stream_cfg
+                else 1.0
+            ),
+            reconnect_max_seconds=(
+                float(stream_cfg.reconnect_max_seconds)
+                if stream_cfg
+                else 30.0
+            ),
+            logger=logger,
+        )
+    app.state.activity_listener = listener
+    app.state.activity_stream_ready = False
+
     app.include_router(entity_router)
     app.include_router(entity_timeline_router)
     app.include_router(timeline_router)
+    app.include_router(activity_ws_router)
 
     @app.get("/health", response_model=HealthOut, tags=["system"])
     def health() -> HealthOut:
@@ -147,7 +235,6 @@ def create_app(
         request: Request,
         exc: RequestValidationError,
     ) -> JSONResponse:
-        # Avoid leaking raw request body internals beyond field errors.
         return JSONResponse(
             status_code=422,
             content={
@@ -192,12 +279,17 @@ def _safe_validation_detail(errors: list[Any]) -> list[dict[str, Any]]:
     return cleaned
 
 
-def create_app_from_config() -> FastAPI:
-    """Factory used by uvicorn: ``uvicorn api.app:create_app_from_config``."""
+def build_app_from_loaded_config(
+    app_config: Any,
+    *,
+    create_schema: bool = False,
+) -> FastAPI:
+    """Build the API app from an already-loaded ``AppConfig``.
 
-    from config import load_app_config
+    Used by both ``python -m api`` and ``create_app_from_config`` so CLI and
+    uvicorn factory paths wire activity_stream identically.
+    """
 
-    app_config = load_app_config()
     limits = QueryLimits(
         entity_default_limit=app_config.api.default_limit,
         entity_maximum_limit=app_config.api.maximum_limit,
@@ -210,5 +302,14 @@ def create_app_from_config() -> FastAPI:
         database_url=app_config.database.url,
         limits=limits,
         timeline_limits=timeline_limits,
-        create_schema=False,
+        activity_stream_config=app_config.activity_stream,
+        create_schema=create_schema,
     )
+
+
+def create_app_from_config() -> FastAPI:
+    """Factory used by uvicorn: ``uvicorn api.app:create_app_from_config``."""
+
+    from config import load_app_config
+
+    return build_app_from_loaded_config(load_app_config())

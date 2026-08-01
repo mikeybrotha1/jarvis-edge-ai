@@ -17,6 +17,7 @@ from typing import Any
 import yaml
 
 from config.models import (
+    ActivityStreamConfig,
     ApiConfig,
     AppConfig,
     CameraConfig,
@@ -71,6 +72,19 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
         {
             "default_limit",
             "maximum_limit",
+        }
+    ),
+    "activity_stream": frozenset(
+        {
+            "enabled",
+            "notify_channel",
+            "observation_notifications_enabled",
+            "observation_min_interval_seconds",
+            "client_queue_size",
+            "heartbeat_interval_seconds",
+            "max_connections",
+            "reconnect_initial_seconds",
+            "reconnect_max_seconds",
         }
     ),
     "logging": frozenset({"level", "log_file"}),
@@ -183,6 +197,29 @@ def _default_values() -> dict[str, dict[str, Any]]:
         "timeline": {
             "default_limit": defaults.timeline.default_limit,
             "maximum_limit": defaults.timeline.maximum_limit,
+        },
+        "activity_stream": {
+            "enabled": defaults.activity_stream.enabled,
+            "notify_channel": defaults.activity_stream.notify_channel,
+            "observation_notifications_enabled": (
+                defaults.activity_stream.observation_notifications_enabled
+            ),
+            "observation_min_interval_seconds": (
+                defaults.activity_stream.observation_min_interval_seconds
+            ),
+            "client_queue_size": (
+                defaults.activity_stream.client_queue_size
+            ),
+            "heartbeat_interval_seconds": (
+                defaults.activity_stream.heartbeat_interval_seconds
+            ),
+            "max_connections": defaults.activity_stream.max_connections,
+            "reconnect_initial_seconds": (
+                defaults.activity_stream.reconnect_initial_seconds
+            ),
+            "reconnect_max_seconds": (
+                defaults.activity_stream.reconnect_max_seconds
+            ),
         },
         "logging": {
             "level": defaults.logging.level,
@@ -440,6 +477,69 @@ def _apply_env_overrides(
         environ,
         "JARVIS_TIMELINE_MAXIMUM_LIMIT",
     )
+    _set_env_bool(
+        values,
+        "activity_stream",
+        "enabled",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_ENABLED",
+    )
+    _set_env_string(
+        values,
+        "activity_stream",
+        "notify_channel",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_NOTIFY_CHANNEL",
+    )
+    _set_env_bool(
+        values,
+        "activity_stream",
+        "observation_notifications_enabled",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_OBSERVATION_NOTIFICATIONS_ENABLED",
+    )
+    _set_env_float(
+        values,
+        "activity_stream",
+        "observation_min_interval_seconds",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_OBSERVATION_MIN_INTERVAL_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "activity_stream",
+        "client_queue_size",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_CLIENT_QUEUE_SIZE",
+    )
+    _set_env_float(
+        values,
+        "activity_stream",
+        "heartbeat_interval_seconds",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_HEARTBEAT_INTERVAL_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "activity_stream",
+        "max_connections",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_MAX_CONNECTIONS",
+    )
+    _set_env_float(
+        values,
+        "activity_stream",
+        "reconnect_initial_seconds",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_RECONNECT_INITIAL_SECONDS",
+    )
+    _set_env_float(
+        values,
+        "activity_stream",
+        "reconnect_max_seconds",
+        environ,
+        "JARVIS_ACTIVITY_STREAM_RECONNECT_MAX_SECONDS",
+    )
     _set_env_string(
         values,
         "logging",
@@ -683,6 +783,73 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "timeline.default_limit cannot exceed timeline.maximum_limit."
         )
 
+    activity_enabled = values["activity_stream"]["enabled"]
+    if not isinstance(activity_enabled, bool):
+        errors.append("activity_stream.enabled must be a boolean.")
+
+    notify_channel = values["activity_stream"]["notify_channel"]
+    if not isinstance(notify_channel, str) or not notify_channel.strip():
+        errors.append(
+            "activity_stream.notify_channel must be a non-empty string."
+        )
+    else:
+        try:
+            from storage.activity_notify import validate_notify_channel
+
+            validate_notify_channel(notify_channel)
+        except Exception as error:  # noqa: BLE001 - config surface
+            errors.append(f"activity_stream.notify_channel: {error}")
+
+    obs_enabled = values["activity_stream"][
+        "observation_notifications_enabled"
+    ]
+    if not isinstance(obs_enabled, bool):
+        errors.append(
+            "activity_stream.observation_notifications_enabled "
+            "must be a boolean."
+        )
+
+    obs_interval = values["activity_stream"][
+        "observation_min_interval_seconds"
+    ]
+    if not _is_number(obs_interval) or float(obs_interval) < 0:
+        errors.append(
+            "activity_stream.observation_min_interval_seconds "
+            "must be a number >= 0."
+        )
+
+    for field_name in (
+        "client_queue_size",
+        "max_connections",
+    ):
+        value = values["activity_stream"][field_name]
+        if not _is_int(value) or int(value) < 1:
+            errors.append(
+                f"activity_stream.{field_name} must be an integer >= 1."
+            )
+
+    for field_name in (
+        "heartbeat_interval_seconds",
+        "reconnect_initial_seconds",
+        "reconnect_max_seconds",
+    ):
+        value = values["activity_stream"][field_name]
+        if not _is_number(value) or float(value) <= 0:
+            errors.append(
+                f"activity_stream.{field_name} must be a number > 0."
+            )
+
+    if (
+        _is_number(values["activity_stream"]["reconnect_initial_seconds"])
+        and _is_number(values["activity_stream"]["reconnect_max_seconds"])
+        and float(values["activity_stream"]["reconnect_initial_seconds"])
+        > float(values["activity_stream"]["reconnect_max_seconds"])
+    ):
+        errors.append(
+            "activity_stream.reconnect_initial_seconds cannot exceed "
+            "reconnect_max_seconds."
+        )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -774,6 +941,37 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
         timeline=TimelineConfig(
             default_limit=int(values["timeline"]["default_limit"]),
             maximum_limit=int(values["timeline"]["maximum_limit"]),
+        ),
+        activity_stream=ActivityStreamConfig(
+            enabled=bool(values["activity_stream"]["enabled"]),
+            notify_channel=str(
+                values["activity_stream"]["notify_channel"]
+            ).strip(),
+            observation_notifications_enabled=bool(
+                values["activity_stream"][
+                    "observation_notifications_enabled"
+                ]
+            ),
+            observation_min_interval_seconds=float(
+                values["activity_stream"][
+                    "observation_min_interval_seconds"
+                ]
+            ),
+            client_queue_size=int(
+                values["activity_stream"]["client_queue_size"]
+            ),
+            heartbeat_interval_seconds=float(
+                values["activity_stream"]["heartbeat_interval_seconds"]
+            ),
+            max_connections=int(
+                values["activity_stream"]["max_connections"]
+            ),
+            reconnect_initial_seconds=float(
+                values["activity_stream"]["reconnect_initial_seconds"]
+            ),
+            reconnect_max_seconds=float(
+                values["activity_stream"]["reconnect_max_seconds"]
+            ),
         ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),

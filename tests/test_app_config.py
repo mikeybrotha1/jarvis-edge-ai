@@ -51,6 +51,20 @@ class AppConfigTests(unittest.TestCase):
         self.assertEqual(cfg.api.maximum_limit, 200)
         self.assertEqual(cfg.timeline.default_limit, 50)
         self.assertEqual(cfg.timeline.maximum_limit, 200)
+        self.assertTrue(cfg.activity_stream.enabled)
+        self.assertEqual(
+            cfg.activity_stream.notify_channel,
+            "jarvis_activity",
+        )
+        self.assertFalse(
+            cfg.activity_stream.observation_notifications_enabled
+        )
+        self.assertEqual(
+            cfg.activity_stream.observation_min_interval_seconds,
+            1.0,
+        )
+        self.assertEqual(cfg.activity_stream.client_queue_size, 100)
+        self.assertEqual(cfg.activity_stream.max_connections, 25)
         self.assertEqual(cfg.logging.level, "INFO")
         self.assertEqual(cfg.logging.log_file, "logs/jarvis.log")
         self.assertEqual(cfg.runtime.platform, "raspberry_pi_5")
