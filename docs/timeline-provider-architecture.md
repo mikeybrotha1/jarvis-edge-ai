@@ -43,6 +43,7 @@ the public protocol.
 |----------|-------------|-------------|
 | `EntityLifecycleTimelineProvider` | `entity_created`, `entity_closed`, `observation_recorded` | `entity-created:`, `entity-closed:`, `observation:` |
 | `SpatialTimelineProvider` | `zone_entered`, `zone_exited`, `zone_occupancy_changed` | `zone-entered:`, `zone-exited:`, `zone-occupancy:` |
+| `AlertTimelineProvider` (v0.8.0) | `alert_triggered`, `alert_resolved` | `alert-triggered:`, `alert-resolved:` |
 
 Registration rejects duplicate event-type or prefix ownership at construction
 time (`TimelineProviderRegistrationError`). Failures surface at app/test

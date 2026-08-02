@@ -567,3 +567,12 @@ button:disabled {
   padding: 0.25rem 0;
   border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
 }
+
+.event-type.alert_triggered {
+  background: color-mix(in srgb, var(--error) 22%, transparent);
+  color: var(--error);
+}
+.event-type.alert_resolved {
+  background: color-mix(in srgb, var(--ok) 22%, transparent);
+  color: var(--ok);
+}

@@ -19,15 +19,27 @@ from sqlalchemy.orm import Session, sessionmaker
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from api.activity_ws import router as activity_ws_router
+from api.alert_routes import alerts_router, rules_router
 from api.entity_routes import router as entity_router
 from api.schemas import HealthOut
 from api.timeline_routes import entity_timeline_router, router as timeline_router
 from api.zone_routes import entity_zones_router, router as zone_router
 from services.activity_listener import ActivityNotificationListener
 from services.activity_stream import ActivityStreamBroker
+from services.alerts.consumer import AlertCommittedEventConsumer
+from services.alerts.due_reconciler import AlertDueReconciler
+from services.alerts.evaluation_service import AlertEvaluationService
+from services.alerts.rule_service import AlertQueryService, AlertRuleService
 from services.entity_query_service import EntityQueryService, QueryLimits
 from services.timeline_service import TimelineLimits, TimelineService
 from services.zone_query_service import ZoneQueryLimits, ZoneQueryService
+from storage.activity_notify import ActivityNotificationPublisher
+from storage.alert_repositories import (
+    AlertCheckpointRepository,
+    AlertEvaluatorStateRepository,
+    AlertRepository,
+    AlertRuleRepository,
+)
 from storage.entity_repository import EntityRepository
 from storage.entity_zone_session_repository import EntityZoneSessionRepository
 from storage.observation_repository import ObservationRepository
@@ -56,6 +68,7 @@ def create_app(
     activity_broker: ActivityStreamBroker | None = None,
     activity_listener: ActivityNotificationListener | None = None,
     enable_activity_stream: bool | None = None,
+    alerts_config: Any | None = None,
     create_schema: bool = False,
     title: str = "Jarvis Edge AI Entity Query API",
 ) -> FastAPI:
@@ -108,7 +121,26 @@ def create_app(
                 stream_enabled,
             )
 
+        alert_consumer = getattr(app.state, "alert_consumer", None)
+        alert_reconciler = getattr(app.state, "alert_reconciler", None)
+        if alert_consumer is not None:
+            try:
+                await alert_consumer.start()
+                await alert_consumer.wait_until_ready(timeout=30.0)
+            except Exception:
+                logger.exception("Failed to start alert consumer")
+        if alert_reconciler is not None:
+            try:
+                await alert_reconciler.start()
+            except Exception:
+                logger.exception("Failed to start alert due reconciler")
+
         yield
+
+        if alert_reconciler is not None:
+            await alert_reconciler.stop()
+        if alert_consumer is not None:
+            await alert_consumer.stop()
 
         if broker is not None:
             await broker.close_all(code=1001, reason="server shutdown")
@@ -123,7 +155,7 @@ def create_app(
 
     app = FastAPI(
         title=title,
-        version="0.7.0",
+        version="0.8.0",
         lifespan=lifespan,
     )
 
@@ -261,11 +293,119 @@ def create_app(
     app.state.activity_listener = listener
     app.state.activity_stream_ready = False
 
+    # Alert subsystem (separate from core vision transactions).
+    alerts_cfg = alerts_config
+    factory_for_alerts = getattr(app.state, "session_factory", None)
+    alert_rule_service = None
+    alert_query_service = None
+    alert_consumer = None
+    alert_reconciler = None
+    if factory_for_alerts is not None:
+        rule_repo = AlertRuleRepository(factory_for_alerts)
+        alert_repo = AlertRepository(factory_for_alerts)
+        state_repo = AlertEvaluatorStateRepository(factory_for_alerts)
+        checkpoint_repo = AlertCheckpointRepository(factory_for_alerts)
+        session_repo = EntityZoneSessionRepository(factory_for_alerts)
+        max_rules = int(getattr(alerts_cfg, "max_rules", 100)) if alerts_cfg else 100
+        max_meta = (
+            int(getattr(alerts_cfg, "max_metadata_bytes", 8192))
+            if alerts_cfg
+            else 8192
+        )
+        default_cd = (
+            int(getattr(alerts_cfg, "default_cooldown_seconds", 60))
+            if alerts_cfg
+            else 60
+        )
+        alert_rule_service = AlertRuleService(
+            rule_repo,
+            max_rules=max_rules,
+            max_metadata_bytes=max_meta,
+            default_cooldown=default_cd,
+            logger=logger,
+        )
+        alert_publisher = ActivityNotificationPublisher(
+            channel=(
+                stream_cfg.notify_channel
+                if stream_cfg is not None
+                else "jarvis_activity"
+            ),
+            logger=logger,
+        )
+        alert_query_service = AlertQueryService(
+            alert_repo,
+            session_factory=factory_for_alerts,
+            activity_publisher=alert_publisher,
+            logger=logger,
+        )
+        evaluation = AlertEvaluationService(
+            factory_for_alerts,
+            rule_repo,
+            alert_repo,
+            state_repo,
+            activity_publisher=alert_publisher,
+            session_repository=session_repo,
+            logger=logger,
+        )
+        alerts_enabled = (
+            bool(alerts_cfg.enabled) if alerts_cfg is not None else True
+        )
+        alert_consumer = AlertCommittedEventConsumer(
+            evaluation_service=evaluation,
+            timeline_service=resolved_timeline,
+            checkpoint_repository=checkpoint_repo,
+            consumer_name=(
+                str(alerts_cfg.consumer_name)
+                if alerts_cfg is not None
+                else "jarvis-alert-evaluator"
+            ),
+            queue_size=(
+                int(alerts_cfg.queue_size) if alerts_cfg is not None else 500
+            ),
+            replay_overlap_seconds=(
+                float(alerts_cfg.replay_overlap_seconds)
+                if alerts_cfg is not None
+                else 5.0
+            ),
+            startup_catchup_limit=(
+                int(alerts_cfg.startup_catchup_limit)
+                if alerts_cfg is not None
+                else 500
+            ),
+            enabled=alerts_enabled,
+            logger=logger,
+        )
+        alert_reconciler = AlertDueReconciler(
+            evaluation,
+            interval_seconds=(
+                float(alerts_cfg.reconcile_interval_seconds)
+                if alerts_cfg is not None
+                else 2.0
+            ),
+            batch_size=(
+                int(alerts_cfg.reconcile_batch_size)
+                if alerts_cfg is not None
+                else 100
+            ),
+            enabled=alerts_enabled,
+            logger=logger,
+        )
+        if listener is not None:
+            listener.add_event_handler(alert_consumer.submit)
+
+    app.state.alert_rule_service = alert_rule_service
+    app.state.alert_query_service = alert_query_service
+    app.state.alert_consumer = alert_consumer
+    app.state.alert_reconciler = alert_reconciler
+    app.state.alerts_config = alerts_cfg
+
     app.include_router(entity_router)
     app.include_router(entity_timeline_router)
     app.include_router(entity_zones_router)
     app.include_router(timeline_router)
     app.include_router(zone_router)
+    app.include_router(rules_router)
+    app.include_router(alerts_router)
     app.include_router(activity_ws_router)
 
     _mount_live_activity_console(app)
@@ -389,6 +529,7 @@ def build_app_from_loaded_config(
         timeline_limits=timeline_limits,
         zone_limits=zone_limits,
         activity_stream_config=app_config.activity_stream,
+        alerts_config=app_config.alerts,
         create_schema=create_schema,
     )
 

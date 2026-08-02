@@ -85,3 +85,17 @@ spatial:
   maximum_zones_per_camera: 10
   occupancy_stale_seconds: 60
   publish_occupancy_changes: true
+
+# Durable alerts & rule evaluation (v0.8.0)
+alerts:
+  enabled: true
+  consumer_name: jarvis-alert-evaluator
+  queue_size: 500
+  reconcile_interval_seconds: 2
+  reconcile_batch_size: 100
+  replay_overlap_seconds: 5
+  max_rules: 100
+  default_cooldown_seconds: 60
+  max_metadata_bytes: 8192
+  startup_catchup_limit: 500
+  timezone_default: UTC

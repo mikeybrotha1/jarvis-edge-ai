@@ -66,6 +66,17 @@ Unknown YAML sections or keys raise a configuration error.
 | `JARVIS_SPATIAL_MAXIMUM_ZONES_PER_CAMERA` | `spatial.maximum_zones_per_camera` |
 | `JARVIS_SPATIAL_OCCUPANCY_STALE_SECONDS` | `spatial.occupancy_stale_seconds` |
 | `JARVIS_SPATIAL_PUBLISH_OCCUPANCY_CHANGES` | `spatial.publish_occupancy_changes` |
+| `JARVIS_ALERTS_ENABLED` | `alerts.enabled` |
+| `JARVIS_ALERTS_CONSUMER_NAME` | `alerts.consumer_name` |
+| `JARVIS_ALERTS_QUEUE_SIZE` | `alerts.queue_size` |
+| `JARVIS_ALERTS_RECONCILE_INTERVAL_SECONDS` | `alerts.reconcile_interval_seconds` |
+| `JARVIS_ALERTS_RECONCILE_BATCH_SIZE` | `alerts.reconcile_batch_size` |
+| `JARVIS_ALERTS_REPLAY_OVERLAP_SECONDS` | `alerts.replay_overlap_seconds` |
+| `JARVIS_ALERTS_MAX_RULES` | `alerts.max_rules` |
+| `JARVIS_ALERTS_DEFAULT_COOLDOWN_SECONDS` | `alerts.default_cooldown_seconds` |
+| `JARVIS_ALERTS_MAX_METADATA_BYTES` | `alerts.max_metadata_bytes` |
+| `JARVIS_ALERTS_STARTUP_CATCHUP_LIMIT` | `alerts.startup_catchup_limit` |
+| `JARVIS_ALERTS_TIMEZONE_DEFAULT` | `alerts.timezone_default` |
 | `JARVIS_LOG_LEVEL` | `logging.level` |
 | `JARVIS_LOG_FILE` | `logging.log_file` |
 | `JARVIS_RUNTIME_PLATFORM` | `runtime.platform` |

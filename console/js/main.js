@@ -3,8 +3,11 @@
  */
 
 import {
+  acknowledgeAlert,
+  createAlertRule,
   createZone,
   getActiveEntities,
+  getAlerts,
   getEntity,
   getHealth,
   getRecentEntities,
@@ -13,6 +16,7 @@ import {
   getZoneSessions,
   getZones,
   patchZone,
+  resolveAlert,
   sanitizeMessage,
 } from "./api.js";
 import { createRecoveryController, filtersFromUi } from "./recovery.js";
@@ -70,6 +74,15 @@ const dom = {
   zoneFormStatus: document.getElementById("zone-form-status"),
   btnZoneDisable: document.getElementById("btn-zone-disable"),
   btnZoneReset: document.getElementById("btn-zone-reset"),
+  alertList: document.getElementById("alert-list"),
+  alertDetail: document.getElementById("alert-detail"),
+  btnAlertAck: document.getElementById("btn-alert-ack"),
+  btnAlertResolve: document.getElementById("btn-alert-resolve"),
+  alertRuleForm: document.getElementById("alert-rule-form"),
+  ruleName: document.getElementById("rule-name"),
+  ruleEventType: document.getElementById("rule-event-type"),
+  ruleSeverity: document.getElementById("rule-severity"),
+  ruleFormStatus: document.getElementById("rule-form-status"),
   status: {
     ws: {
       item: document.querySelector('[data-status="ws"]'),
@@ -95,8 +108,17 @@ const dom = {
       item: document.querySelector('[data-status="mode"]'),
       value: document.getElementById("status-mode"),
     },
+    alerts: {
+      item: document.querySelector('[data-status="alerts"]'),
+      value: document.getElementById("status-alerts"),
+    },
   },
 };
+
+/** @type {string|null} */
+let selectedAlertId = null;
+/** @type {object[]} */
+let alertsCache = [];
 
 /** @type {object} */
 let uiFilters = {
@@ -106,6 +128,8 @@ let uiFilters = {
     "zone_entered",
     "zone_exited",
     "zone_occupancy_changed",
+    "alert_triggered",
+    "alert_resolved",
   ],
   camera_id: "",
   entity_type: "",
@@ -211,6 +235,8 @@ function readFiltersFromForm() {
           "zone_entered",
           "zone_exited",
           "zone_occupancy_changed",
+          "alert_triggered",
+          "alert_resolved",
         ],
     camera_id: dom.filterCamera.value.trim(),
     entity_type: dom.filterEntityType.value.trim(),
@@ -244,6 +270,9 @@ function refreshStatus() {
           ? "error"
           : null;
 
+  const openAlerts = alertsCache.filter(
+    (a) => a.status === "open" || a.status === "acknowledged"
+  ).length;
   renderStatusBar(dom.status, {
     wsText: wsState,
     wsTone,
@@ -256,6 +285,9 @@ function refreshStatus() {
     modeText: mode,
     modeTone,
   });
+  if (dom.status.alerts && dom.status.alerts.value) {
+    dom.status.alerts.value.textContent = String(openAlerts);
+  }
 }
 
 function refreshFeed() {
@@ -422,6 +454,8 @@ function wireUi() {
       "zone_entered",
       "zone_exited",
       "zone_occupancy_changed",
+      "alert_triggered",
+      "alert_resolved",
     ]);
     for (const input of dom.filtersForm.querySelectorAll(
       'input[name="event_type"]'
@@ -618,6 +652,34 @@ async function loadZoneDetails(zoneId) {
   }
 }
 
+async function loadAlerts() {
+  if (!dom.alertList) return;
+  try {
+    const page = await getAlerts({ limit: 30, sort: "desc" });
+    alertsCache = Array.isArray(page.items) ? page.items : [];
+    while (dom.alertList.firstChild) dom.alertList.removeChild(dom.alertList.firstChild);
+    for (const alert of alertsCache) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.textContent = `${alert.severity || "?"} · ${alert.status || "?"} · ${String(alert.summary || "").slice(0, 80)}`;
+      btn.addEventListener("click", () => {
+        selectedAlertId = String(alert.id);
+        if (dom.alertDetail) {
+          dom.alertDetail.textContent = `${alert.id} · rule ${alert.rule_id} · ${alert.summary || ""}`;
+        }
+        if (dom.btnAlertAck) dom.btnAlertAck.disabled = false;
+        if (dom.btnAlertResolve) dom.btnAlertResolve.disabled = false;
+      });
+      li.appendChild(btn);
+      dom.alertList.appendChild(li);
+    }
+    refreshStatus();
+  } catch (err) {
+    showWarning(sanitizeMessage(err.message || "Failed to load alerts"));
+  }
+}
+
 async function init() {
   wireUi();
   readFiltersFromForm();
@@ -627,10 +689,56 @@ async function init() {
   if (dom.occupancyPanel) renderOccupancyPanel(dom.occupancyPanel, null);
   if (dom.zoneSessions) renderZoneSessions(dom.zoneSessions, []);
 
+  if (dom.btnAlertAck) {
+    dom.btnAlertAck.addEventListener("click", async () => {
+      if (!selectedAlertId) return;
+      try {
+        await acknowledgeAlert(selectedAlertId);
+        await loadAlerts();
+      } catch (err) {
+        showWarning(sanitizeMessage(err.message || "Acknowledge failed"));
+      }
+    });
+  }
+  if (dom.btnAlertResolve) {
+    dom.btnAlertResolve.addEventListener("click", async () => {
+      if (!selectedAlertId) return;
+      try {
+        await resolveAlert(selectedAlertId);
+        await loadAlerts();
+      } catch (err) {
+        showWarning(sanitizeMessage(err.message || "Resolve failed"));
+      }
+    });
+  }
+  if (dom.alertRuleForm) {
+    dom.alertRuleForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        await createAlertRule({
+          name: dom.ruleName.value.trim(),
+          rule_type: "event_match",
+          source_event_types: [dom.ruleEventType.value],
+          severity: dom.ruleSeverity.value,
+          cooldown_seconds: 0,
+        });
+        if (dom.ruleFormStatus) dom.ruleFormStatus.textContent = "Rule created.";
+        dom.ruleName.value = "";
+      } catch (err) {
+        if (dom.ruleFormStatus) {
+          dom.ruleFormStatus.textContent = sanitizeMessage(
+            err.message || "Rule create failed"
+          );
+        }
+      }
+    });
+  }
+
   await probeHealth();
   await loadInitialHistory();
   await loadEntityLists();
   await loadZones();
+  await loadAlerts();
   socket.start();
   applyWsSubscription();
   refreshStatus();

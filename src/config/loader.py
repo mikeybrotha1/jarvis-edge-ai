@@ -18,6 +18,7 @@ import yaml
 
 from config.models import (
     ActivityStreamConfig,
+    AlertsConfig,
     ApiConfig,
     AppConfig,
     CameraConfig,
@@ -98,6 +99,21 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "maximum_zones_per_camera",
             "occupancy_stale_seconds",
             "publish_occupancy_changes",
+        }
+    ),
+    "alerts": frozenset(
+        {
+            "enabled",
+            "consumer_name",
+            "queue_size",
+            "reconcile_interval_seconds",
+            "reconcile_batch_size",
+            "replay_overlap_seconds",
+            "max_rules",
+            "default_cooldown_seconds",
+            "max_metadata_bytes",
+            "startup_catchup_limit",
+            "timezone_default",
         }
     ),
     "logging": frozenset({"level", "log_file"}),
@@ -256,6 +272,23 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "publish_occupancy_changes": (
                 defaults.spatial.publish_occupancy_changes
             ),
+        },
+        "alerts": {
+            "enabled": defaults.alerts.enabled,
+            "consumer_name": defaults.alerts.consumer_name,
+            "queue_size": defaults.alerts.queue_size,
+            "reconcile_interval_seconds": (
+                defaults.alerts.reconcile_interval_seconds
+            ),
+            "reconcile_batch_size": defaults.alerts.reconcile_batch_size,
+            "replay_overlap_seconds": defaults.alerts.replay_overlap_seconds,
+            "max_rules": defaults.alerts.max_rules,
+            "default_cooldown_seconds": (
+                defaults.alerts.default_cooldown_seconds
+            ),
+            "max_metadata_bytes": defaults.alerts.max_metadata_bytes,
+            "startup_catchup_limit": defaults.alerts.startup_catchup_limit,
+            "timezone_default": defaults.alerts.timezone_default,
         },
         "logging": {
             "level": defaults.logging.level,
@@ -632,6 +665,71 @@ def _apply_env_overrides(
         environ,
         "JARVIS_SPATIAL_PUBLISH_OCCUPANCY_CHANGES",
     )
+    _set_env_bool(
+        values, "alerts", "enabled", environ, "JARVIS_ALERTS_ENABLED"
+    )
+    _set_env_string(
+        values,
+        "alerts",
+        "consumer_name",
+        environ,
+        "JARVIS_ALERTS_CONSUMER_NAME",
+    )
+    _set_env_int(
+        values, "alerts", "queue_size", environ, "JARVIS_ALERTS_QUEUE_SIZE"
+    )
+    _set_env_float(
+        values,
+        "alerts",
+        "reconcile_interval_seconds",
+        environ,
+        "JARVIS_ALERTS_RECONCILE_INTERVAL_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "alerts",
+        "reconcile_batch_size",
+        environ,
+        "JARVIS_ALERTS_RECONCILE_BATCH_SIZE",
+    )
+    _set_env_float(
+        values,
+        "alerts",
+        "replay_overlap_seconds",
+        environ,
+        "JARVIS_ALERTS_REPLAY_OVERLAP_SECONDS",
+    )
+    _set_env_int(
+        values, "alerts", "max_rules", environ, "JARVIS_ALERTS_MAX_RULES"
+    )
+    _set_env_int(
+        values,
+        "alerts",
+        "default_cooldown_seconds",
+        environ,
+        "JARVIS_ALERTS_DEFAULT_COOLDOWN_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "alerts",
+        "max_metadata_bytes",
+        environ,
+        "JARVIS_ALERTS_MAX_METADATA_BYTES",
+    )
+    _set_env_int(
+        values,
+        "alerts",
+        "startup_catchup_limit",
+        environ,
+        "JARVIS_ALERTS_STARTUP_CATCHUP_LIMIT",
+    )
+    _set_env_string(
+        values,
+        "alerts",
+        "timezone_default",
+        environ,
+        "JARVIS_ALERTS_TIMEZONE_DEFAULT",
+    )
     _set_env_string(
         values,
         "logging",
@@ -1001,6 +1099,47 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "spatial.publish_occupancy_changes must be a boolean."
         )
 
+    alerts_enabled = values["alerts"]["enabled"]
+    if not isinstance(alerts_enabled, bool):
+        errors.append("alerts.enabled must be a boolean.")
+    consumer_name = values["alerts"]["consumer_name"]
+    if not isinstance(consumer_name, str) or not consumer_name.strip():
+        errors.append("alerts.consumer_name must be a non-empty string.")
+    for field_name in (
+        "queue_size",
+        "reconcile_batch_size",
+        "max_rules",
+        "default_cooldown_seconds",
+        "max_metadata_bytes",
+        "startup_catchup_limit",
+    ):
+        value = values["alerts"][field_name]
+        if not _is_int(value) or int(value) < 1:
+            errors.append(f"alerts.{field_name} must be an integer >= 1.")
+    for field_name in (
+        "reconcile_interval_seconds",
+        "replay_overlap_seconds",
+    ):
+        value = values["alerts"][field_name]
+        if not _is_number(value) or float(value) < 0:
+            errors.append(f"alerts.{field_name} must be a number >= 0.")
+    if _is_int(values["alerts"]["max_rules"]) and int(
+        values["alerts"]["max_rules"]
+    ) > 1000:
+        errors.append("alerts.max_rules must be <= 1000.")
+    tz_default = values["alerts"]["timezone_default"]
+    if not isinstance(tz_default, str) or not tz_default.strip():
+        errors.append("alerts.timezone_default must be a non-empty string.")
+    else:
+        try:
+            from zoneinfo import ZoneInfo
+
+            ZoneInfo(str(tz_default).strip())
+        except Exception:  # noqa: BLE001
+            errors.append(
+                "alerts.timezone_default must be a valid IANA timezone."
+            )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -1149,6 +1288,31 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             publish_occupancy_changes=bool(
                 values["spatial"]["publish_occupancy_changes"]
             ),
+        ),
+        alerts=AlertsConfig(
+            enabled=bool(values["alerts"]["enabled"]),
+            consumer_name=str(values["alerts"]["consumer_name"]).strip(),
+            queue_size=int(values["alerts"]["queue_size"]),
+            reconcile_interval_seconds=float(
+                values["alerts"]["reconcile_interval_seconds"]
+            ),
+            reconcile_batch_size=int(
+                values["alerts"]["reconcile_batch_size"]
+            ),
+            replay_overlap_seconds=float(
+                values["alerts"]["replay_overlap_seconds"]
+            ),
+            max_rules=int(values["alerts"]["max_rules"]),
+            default_cooldown_seconds=int(
+                values["alerts"]["default_cooldown_seconds"]
+            ),
+            max_metadata_bytes=int(values["alerts"]["max_metadata_bytes"]),
+            startup_catchup_limit=int(
+                values["alerts"]["startup_catchup_limit"]
+            ),
+            timezone_default=str(
+                values["alerts"]["timezone_default"]
+            ).strip(),
         ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),

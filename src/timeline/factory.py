@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, sessionmaker
 
 from timeline.composer import TimelineComposer
 from timeline.provider import TimelineProvider
+from timeline.providers.alert import AlertTimelineProvider
 from timeline.providers.entity_lifecycle import EntityLifecycleTimelineProvider
 from timeline.providers.spatial import SpatialTimelineProvider
 
@@ -18,6 +19,7 @@ def build_default_timeline_providers(
     return [
         EntityLifecycleTimelineProvider(session_factory),
         SpatialTimelineProvider(session_factory),
+        AlertTimelineProvider(session_factory),
     ]
 
 
