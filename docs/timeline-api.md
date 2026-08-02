@@ -7,13 +7,16 @@ spatial session tables. **No `timeline_events` table** is created.
 
 ```
 FastAPI routes
-  → TimelineService
-    → TimelineRepository (SQLAlchemy Core UNION ALL)
-      → entities / entity_observations / entity_zone_sessions (+ zones)
+  → TimelineService (validation)
+    → TimelineComposer (v0.7.0)
+         ├─ EntityLifecycleTimelineProvider
+         └─ SpatialTimelineProvider
 ```
 
-Routes never issue SQLAlchemy queries directly. The repository reuses the
-shared SQLAlchemy session factory from entity memory.
+Routes never issue SQLAlchemy queries directly. Providers project via the
+canonical typed contract; the composer merges bounded streams. See
+`docs/timeline-provider-architecture.md`. Public event shapes and IDs match
+v0.6.0.
 
 ## Event types
 

@@ -123,7 +123,7 @@ def create_app(
 
     app = FastAPI(
         title=title,
-        version="0.6.0",
+        version="0.7.0",
         lifespan=lifespan,
     )
 
@@ -177,6 +177,7 @@ def create_app(
             )
 
         if resolved_timeline is None:
+            # v0.7.0: TimelineRepository is a facade over provider composer.
             resolved_timeline = TimelineService(
                 TimelineRepository(factory),
                 entity_repository,
