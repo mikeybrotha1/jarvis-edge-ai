@@ -18,6 +18,8 @@ class TimelineEventType(str, Enum):
     ZONE_ENTERED = "zone_entered"
     ZONE_EXITED = "zone_exited"
     ZONE_OCCUPANCY_CHANGED = "zone_occupancy_changed"
+    ALERT_TRIGGERED = "alert_triggered"
+    ALERT_RESOLVED = "alert_resolved"
 
 
 DEFAULT_TIMELINE_EVENT_TYPES: tuple[TimelineEventType, ...] = (
@@ -26,6 +28,8 @@ DEFAULT_TIMELINE_EVENT_TYPES: tuple[TimelineEventType, ...] = (
     TimelineEventType.ZONE_ENTERED,
     TimelineEventType.ZONE_EXITED,
     TimelineEventType.ZONE_OCCUPANCY_CHANGED,
+    TimelineEventType.ALERT_TRIGGERED,
+    TimelineEventType.ALERT_RESOLVED,
 )
 
 ALL_TIMELINE_EVENT_TYPES: frozenset[str] = frozenset(

@@ -13,7 +13,7 @@
   <header class="top-bar" role="banner">
     <div class="brand">
       <h1>Jarvis Live Activity</h1>
-      <p class="subtitle">v0.6.0 console · spatial + REST + WebSocket</p>
+      <p class="subtitle">v0.8.0 console · alerts + spatial + REST + WebSocket</p>
     </div>
     <div
       id="status-bar"
@@ -48,6 +48,10 @@
         <span class="status-label">Mode</span>
         <span class="status-value" id="status-mode">loading</span>
       </div>
+      <div class="status-item" data-status="alerts">
+        <span class="status-label">Open alerts</span>
+        <span class="status-value" id="status-alerts">—</span>
+      </div>
     </div>
   </header>
 
@@ -76,6 +80,14 @@
           <label class="check">
             <input type="checkbox" name="event_type" value="zone_occupancy_changed" checked />
             <span>zone_occupancy_changed</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="alert_triggered" checked />
+            <span>alert_triggered</span>
+          </label>
+          <label class="check">
+            <input type="checkbox" name="event_type" value="alert_resolved" checked />
+            <span>alert_resolved</span>
           </label>
           <label class="check">
             <input type="checkbox" name="event_type" value="observation_recorded" />
@@ -163,6 +175,39 @@
           <div><dt>Times seen</dt><dd data-field="times_seen">—</dd></div>
         </dl>
         <p id="entity-detail-empty" class="hint">Select an event or entity to inspect.</p>
+      </section>
+
+      <section class="alerts-panel" aria-labelledby="alerts-heading">
+        <h3 id="alerts-heading">Alerts</h3>
+        <ul id="alert-list" class="entity-list" role="list"></ul>
+        <p id="alert-detail" class="hint">Select an alert to acknowledge or resolve.</p>
+        <div class="filter-actions">
+          <button type="button" id="btn-alert-ack" class="secondary" disabled>Acknowledge</button>
+          <button type="button" id="btn-alert-resolve" class="secondary" disabled>Resolve</button>
+        </div>
+        <details class="zone-form-details">
+          <summary>Create event_match rule</summary>
+          <form id="alert-rule-form" class="zone-form">
+            <label class="field"><span>Name</span><input type="text" id="rule-name" required maxlength="128" /></label>
+            <label class="field"><span>Source event</span>
+              <select id="rule-event-type">
+                <option value="entity_created">entity_created</option>
+                <option value="entity_closed">entity_closed</option>
+                <option value="zone_entered">zone_entered</option>
+                <option value="zone_exited">zone_exited</option>
+              </select>
+            </label>
+            <label class="field"><span>Severity</span>
+              <select id="rule-severity">
+                <option value="info">info</option>
+                <option value="warning" selected>warning</option>
+                <option value="critical">critical</option>
+              </select>
+            </label>
+            <button type="submit">Create rule</button>
+            <p id="rule-form-status" class="hint" role="status"></p>
+          </form>
+        </details>
       </section>
 
       <section class="zones-panel" aria-labelledby="zones-heading">

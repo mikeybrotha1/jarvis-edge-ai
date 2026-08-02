@@ -8,12 +8,16 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Awaitable, Callable
 from typing import Any
 
 from services.activity_stream import ActivityStreamBroker
 from services.timeline_service import TimelineService
 from storage.activity_notify import parse_notification_payload
 from storage.sqlalchemy_db import _normalise_database_url
+from storage.timeline_models import TimelineEvent
+
+EventFanoutHandler = Callable[[TimelineEvent], Awaitable[None] | None]
 
 
 class ActivityNotificationListener:
@@ -28,6 +32,7 @@ class ActivityNotificationListener:
         broker: ActivityStreamBroker,
         reconnect_initial_seconds: float = 1.0,
         reconnect_max_seconds: float = 30.0,
+        event_handlers: list[EventFanoutHandler] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._database_url = _to_psycopg_url(database_url)
@@ -39,10 +44,16 @@ class ActivityNotificationListener:
             self._reconnect_initial,
             float(reconnect_max_seconds),
         )
+        self._event_handlers = list(event_handlers or [])
         self._logger = logger or logging.getLogger(__name__)
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
         self._ready = asyncio.Event()
+
+    def add_event_handler(self, handler: EventFanoutHandler) -> None:
+        """Register a thin post-resolve fan-out (e.g. alert consumer)."""
+
+        self._event_handlers.append(handler)
 
     @property
     def is_ready(self) -> bool:
@@ -171,6 +182,17 @@ class ActivityNotificationListener:
                 "Failed to fan-out timeline event_id=%s",
                 event_id,
             )
+
+        for handler in self._event_handlers:
+            try:
+                result = handler(event)
+                if asyncio.iscoroutine(result):
+                    await result
+            except Exception:
+                self._logger.exception(
+                    "Post-resolve event handler failed event_id=%s",
+                    event_id,
+                )
 
 
 def _to_psycopg_url(database_url: str) -> str:

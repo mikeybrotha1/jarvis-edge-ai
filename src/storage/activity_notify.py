@@ -220,6 +220,8 @@ def parse_notification_payload(raw: str | bytes | None) -> dict[str, str]:
         TimelineEventType.ZONE_ENTERED.value,
         TimelineEventType.ZONE_EXITED.value,
         TimelineEventType.ZONE_OCCUPANCY_CHANGED.value,
+        TimelineEventType.ALERT_TRIGGERED.value,
+        TimelineEventType.ALERT_RESOLVED.value,
     }
     if event_type not in allowed:
         raise ValueError(f"unsupported event_type: {event_type}")

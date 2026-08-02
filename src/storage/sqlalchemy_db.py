@@ -18,9 +18,10 @@ from sqlalchemy.pool import StaticPool
 
 from .entity_orm import Base
 
-# Register spatial tables on the shared declarative Base so
-# create_entity_schema() creates zones / entity_zone_sessions.
+# Register spatial and alert tables on the shared declarative Base so
+# create_entity_schema() creates them for tests/bootstrap.
 from . import zone_orm as _zone_orm  # noqa: F401
+from . import alert_orm as _alert_orm  # noqa: F401
 
 
 def create_entity_engine(

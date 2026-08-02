@@ -228,7 +228,7 @@ def row_to_timeline_event(row: Any) -> TimelineEvent:
             "session_id": row["session_id"],
             "occupancy": row["occupancy"],
         }
-    else:
+    elif event_type is TimelineEventType.ZONE_OCCUPANCY_CHANGED:
         zone_name = row["zone_name"] or "zone"
         occupancy = row["occupancy"]
         summary = f"{zone_name} occupancy is now {occupancy}"
@@ -239,6 +239,31 @@ def row_to_timeline_event(row: Any) -> TimelineEvent:
             "session_id": row["session_id"],
             "occupancy": occupancy,
             "cause": cause,
+        }
+    elif event_type is TimelineEventType.ALERT_TRIGGERED:
+        summary = f"Alert triggered for {title}"
+        alert_id = str(row["event_id"]).removeprefix("alert-triggered:")
+        payload = {
+            "alert_id": alert_id,
+            "rule_id": row["identity_key"],
+            "severity": row["status"],
+            "alert_status": row["zone_name"] or "open",
+            "zone_id": row["zone_id"],
+            "source_event_id": row["source_event_type"],
+            "subject_key": row["session_id"],
+        }
+    else:
+        # alert_resolved
+        summary = f"Alert resolved for {title}"
+        alert_id = str(row["event_id"]).removeprefix("alert-resolved:")
+        payload = {
+            "alert_id": alert_id,
+            "rule_id": row["identity_key"],
+            "severity": row["status"],
+            "alert_status": "resolved",
+            "zone_id": row["zone_id"],
+            "source_event_id": row["source_event_type"],
+            "subject_key": row["session_id"],
         }
 
     occurred_at = row["occurred_at"]

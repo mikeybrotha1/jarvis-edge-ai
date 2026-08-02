@@ -116,6 +116,23 @@ class SpatialConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class AlertsConfig:
+    """Durable alerts & rule evaluation (v0.8.0)."""
+
+    enabled: bool = True
+    consumer_name: str = "jarvis-alert-evaluator"
+    queue_size: int = 500
+    reconcile_interval_seconds: float = 2.0
+    reconcile_batch_size: int = 100
+    replay_overlap_seconds: float = 5.0
+    max_rules: int = 100
+    default_cooldown_seconds: int = 60
+    max_metadata_bytes: int = 8192
+    startup_catchup_limit: int = 500
+    timezone_default: str = "UTC"
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -148,5 +165,6 @@ class AppConfig:
         default_factory=ActivityStreamConfig
     )
     spatial: SpatialConfig = field(default_factory=SpatialConfig)
+    alerts: AlertsConfig = field(default_factory=AlertsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

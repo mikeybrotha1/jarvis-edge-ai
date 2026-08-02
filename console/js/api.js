@@ -180,6 +180,52 @@ export async function patchZone(zoneId, body) {
   return apiSend(`/api/v1/zones/${encodeURIComponent(zoneId)}`, "PATCH", body);
 }
 
+export function getAlertRules(filters = {}) {
+  return apiGet("/api/v1/alert-rules", {
+    enabled: filters.enabled,
+    limit: filters.limit ?? 50,
+    offset: filters.offset ?? 0,
+  });
+}
+
+export function createAlertRule(body) {
+  return apiSend("/api/v1/alert-rules", "POST", body);
+}
+
+export function patchAlertRule(ruleId, body) {
+  return apiSend(
+    `/api/v1/alert-rules/${encodeURIComponent(ruleId)}`,
+    "PATCH",
+    body
+  );
+}
+
+export function getAlerts(filters = {}) {
+  return apiGet("/api/v1/alerts", {
+    status: filters.status || undefined,
+    severity: filters.severity || undefined,
+    limit: filters.limit ?? 50,
+    offset: filters.offset ?? 0,
+    sort: filters.sort ?? "desc",
+  });
+}
+
+export function acknowledgeAlert(alertId) {
+  return apiSend(
+    `/api/v1/alerts/${encodeURIComponent(alertId)}/acknowledge`,
+    "POST",
+    {}
+  );
+}
+
+export function resolveAlert(alertId) {
+  return apiSend(
+    `/api/v1/alerts/${encodeURIComponent(alertId)}/resolve`,
+    "POST",
+    {}
+  );
+}
+
 /**
  * @param {string} path
  * @param {string} method

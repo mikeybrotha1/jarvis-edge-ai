@@ -173,6 +173,8 @@ export function filtersFromUi(ui) {
           "zone_entered",
           "zone_exited",
           "zone_occupancy_changed",
+          "alert_triggered",
+          "alert_resolved",
         ];
   return {
     event_types,

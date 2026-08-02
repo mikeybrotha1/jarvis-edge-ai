@@ -24,6 +24,8 @@ DEFAULT_LIFECYCLE_TYPES: frozenset[str] = frozenset(
         TimelineEventType.ZONE_ENTERED.value,
         TimelineEventType.ZONE_EXITED.value,
         TimelineEventType.ZONE_OCCUPANCY_CHANGED.value,
+        TimelineEventType.ALERT_TRIGGERED.value,
+        TimelineEventType.ALERT_RESOLVED.value,
     }
 )
 
@@ -42,6 +44,8 @@ class ActivitySubscription:
     entity_ids: set[UUID] = field(default_factory=set)
     entity_types: set[str] = field(default_factory=set)
     zone_ids: set[UUID] = field(default_factory=set)
+    rule_ids: set[UUID] = field(default_factory=set)
+    severities: set[str] = field(default_factory=set)
 
     def matches(self, event: TimelineEvent) -> bool:
         if event.event_type.value not in self.event_types:
@@ -63,6 +67,20 @@ class ActivitySubscription:
                 return False
             if zone_id not in self.zone_ids:
                 return False
+        if self.rule_ids:
+            rule_raw = event.payload.get("rule_id")
+            if rule_raw is None:
+                return False
+            try:
+                rule_id = UUID(str(rule_raw))
+            except ValueError:
+                return False
+            if rule_id not in self.rule_ids:
+                return False
+        if self.severities:
+            sev = event.payload.get("severity")
+            if sev is None or str(sev) not in self.severities:
+                return False
         return True
 
     def to_public_dict(self) -> dict[str, Any]:
@@ -72,6 +90,8 @@ class ActivitySubscription:
             "entity_ids": [str(item) for item in sorted(self.entity_ids, key=str)],
             "entity_types": sorted(self.entity_types),
             "zone_ids": [str(item) for item in sorted(self.zone_ids, key=str)],
+            "rule_ids": [str(item) for item in sorted(self.rule_ids, key=str)],
+            "severities": sorted(self.severities),
         }
 
 
