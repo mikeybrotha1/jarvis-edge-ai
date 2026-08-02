@@ -1,10 +1,12 @@
-"""Read-only timeline service over entity memory projections."""
+"""Read-only timeline service over the provider composer (v0.7.0)."""
 
 from __future__ import annotations
 
 import logging
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from typing import Protocol
 from uuid import UUID
 
 from services.entity_query_service import EntityNotFoundError
@@ -19,6 +21,9 @@ from storage.timeline_models import (
     TimelinePage,
 )
 from storage.timeline_repository import TimelineRepository
+from timeline.composer import TimelineComposer
+from timeline.factory import build_default_timeline_composer
+from timeline.provider import TimelineProvider
 
 
 class TimelineNotFoundError(LookupError):
@@ -37,18 +42,51 @@ class TimelineLimits:
     maximum_limit: int = 200
 
 
+class _TimelineBackend(Protocol):
+    def list_events(self, filters: TimelineListFilter) -> TimelinePage: ...
+
+    def get_event_by_id(self, event_id: str) -> TimelineEvent | None: ...
+
+
 class TimelineService:
-    """Validate filters and project timeline pages via TimelineRepository."""
+    """Validate filters and list/get events via provider composition.
+
+    Construction options (pick one projection backend):
+
+    - ``composer``: explicit :class:`TimelineComposer`
+    - ``providers``: sequence registered into a new composer
+    - ``timeline_repository``: v0.6-compatible facade (preferred for tests)
+    - ``session_factory`` alone is not accepted here; use repository/composer
+
+    Existing call sites that pass ``TimelineRepository`` first continue to work.
+    """
 
     def __init__(
         self,
-        timeline_repository: TimelineRepository,
-        entity_repository: EntityRepository,
+        timeline_repository: TimelineRepository | TimelineComposer | None = None,
+        entity_repository: EntityRepository | None = None,
         *,
+        composer: TimelineComposer | None = None,
+        providers: Sequence[TimelineProvider] | None = None,
         limits: TimelineLimits | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
-        self._timeline = timeline_repository
+        if entity_repository is None:
+            raise TypeError("entity_repository is required")
+
+        backend: _TimelineBackend
+        if composer is not None:
+            backend = composer
+        elif providers is not None:
+            backend = TimelineComposer(providers)
+        elif timeline_repository is not None:
+            backend = timeline_repository
+        else:
+            raise TypeError(
+                "Provide timeline_repository, composer, or providers."
+            )
+
+        self._timeline = backend
         self._entities = entity_repository
         self._limits = limits or TimelineLimits()
         self._logger = logger or logging.getLogger(__name__)
@@ -222,7 +260,6 @@ class TimelineService:
             raise TimelineValidationError(
                 f"{field} must be an ISO 8601 timestamp."
             )
-        # Naive timestamps are treated as UTC (documented API convention).
         if value.tzinfo is None:
             return value.replace(tzinfo=timezone.utc)
         return value.astimezone(timezone.utc)
@@ -240,3 +277,27 @@ class TimelineService:
             raise TimelineValidationError(
                 "occurred_after cannot be later than occurred_before."
             )
+
+
+def create_timeline_service(
+    session_factory: object,
+    entity_repository: EntityRepository,
+    *,
+    limits: TimelineLimits | None = None,
+    logger: logging.Logger | None = None,
+) -> TimelineService:
+    """Compatibility factory used by app wiring and tests."""
+
+    from sqlalchemy.orm import Session, sessionmaker
+
+    factory = session_factory  # type: ignore[assignment]
+    if not isinstance(factory, sessionmaker):
+        raise TypeError("session_factory must be a SQLAlchemy sessionmaker")
+
+    composer = build_default_timeline_composer(factory)
+    return TimelineService(
+        TimelineRepository(factory, composer=composer),
+        entity_repository,
+        limits=limits,
+        logger=logger,
+    )
