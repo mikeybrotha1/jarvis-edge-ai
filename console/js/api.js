@@ -107,6 +107,31 @@ export function getHealth() {
   return apiGet("/health");
 }
 
+export function getReady() {
+  return apiGet("/ready");
+}
+
+export function getOpsStatus() {
+  return apiGet("/api/v1/ops/status");
+}
+
+export function getOpsRetention() {
+  return apiGet("/api/v1/ops/retention");
+}
+
+/** Non-destructive bounded retention cycle. */
+export function postRetentionDryRun() {
+  return apiSend("/api/v1/ops/retention/dry-run", "POST", {});
+}
+
+/**
+ * Destructive bounded retention cycle (server-guarded).
+ * Callers must confirm in the UI first.
+ */
+export function postRetentionRun() {
+  return apiSend("/api/v1/ops/retention/run", "POST", {});
+}
+
 /**
  * @param {object} filters
  */

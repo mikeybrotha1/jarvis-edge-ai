@@ -15,6 +15,9 @@ import {
   getHealth,
   getNotificationDeliveries,
   getNotificationTargets,
+  getOpsRetention,
+  getOpsStatus,
+  getReady,
   getRecentEntities,
   getTimeline,
   getZoneOccupancy,
@@ -22,10 +25,22 @@ import {
   getZones,
   patchNotificationTarget,
   patchZone,
+  postRetentionDryRun,
+  postRetentionRun,
   resolveAlert,
   retryNotificationDelivery,
   sanitizeMessage,
 } from "./api.js";
+import {
+  DESTRUCTIVE_CONFIRM_TEXT,
+  canEnableDestructiveCleanup,
+  canEnableDryRun,
+  normalizeStatus,
+  renderOpsComponents,
+  renderOpsMetrics,
+  renderRetentionLastRun,
+  renderRetentionPolicy,
+} from "./ops.js";
 import { createRecoveryController, filtersFromUi } from "./recovery.js";
 import { SOURCE, createStore } from "./store.js";
 import {
@@ -108,6 +123,18 @@ const dom = {
   btnTargetDisable: document.getElementById("btn-target-disable"),
   btnTargetReset: document.getElementById("btn-target-reset"),
   deliveryHistoryList: document.getElementById("delivery-history-list"),
+  opsDetails: document.getElementById("ops-details"),
+  opsStale: document.getElementById("ops-stale"),
+  opsOverall: document.getElementById("ops-overall-status"),
+  opsReady: document.getElementById("ops-ready-status"),
+  opsComponentList: document.getElementById("ops-component-list"),
+  opsMetrics: document.getElementById("ops-metrics"),
+  opsRetentionPolicy: document.getElementById("ops-retention-policy"),
+  opsRetentionLastRun: document.getElementById("ops-retention-last-run"),
+  btnOpsDryRun: document.getElementById("btn-ops-dry-run"),
+  btnOpsCleanup: document.getElementById("btn-ops-cleanup"),
+  opsActionStatus: document.getElementById("ops-action-status"),
+  statusOps: document.getElementById("status-ops"),
   status: {
     ws: {
       item: document.querySelector('[data-status="ws"]'),
@@ -970,6 +997,8 @@ async function init() {
     });
   }
 
+  wireOpsControls();
+
   await probeHealth();
   await loadInitialHistory();
   await loadEntityLists();
@@ -977,9 +1006,178 @@ async function init() {
   await loadAlerts();
   await loadTargets();
   await loadDeliveryHistory();
+  // Ops poll failures must never block console init.
+  try {
+    await refreshOps(true);
+  } catch {
+    /* ignore */
+  }
+  startOpsPolling();
   socket.start();
   applyWsSubscription();
   refreshStatus();
+}
+
+// —— Operations panel (v0.10.0) ————————————————————————————————
+
+/** @type {object|null} */
+let lastOpsStatus = null;
+/** @type {object|null} */
+let lastRetention = null;
+/** @type {object|null} */
+let lastReady = null;
+let opsBusy = false;
+/** @type {ReturnType<typeof setInterval>|null} */
+let opsPollTimer = null;
+
+function setOpsActionStatus(message) {
+  if (dom.opsActionStatus) {
+    dom.opsActionStatus.textContent = message || "";
+  }
+}
+
+function updateOpsControlButtons() {
+  const dryOk = !opsBusy && canEnableDryRun(lastRetention);
+  const cleanOk = !opsBusy && canEnableDestructiveCleanup(lastRetention);
+  if (dom.btnOpsDryRun) {
+    dom.btnOpsDryRun.disabled = !dryOk;
+    dom.btnOpsDryRun.title = dryOk
+      ? "Run a non-destructive retention dry-run using server policy"
+      : "Dry-run unavailable (disabled, busy, or cooldown)";
+  }
+  if (dom.btnOpsCleanup) {
+    dom.btnOpsCleanup.disabled = !cleanOk;
+    dom.btnOpsCleanup.title = cleanOk
+      ? "Run destructive retention cleanup using server policy"
+      : "Cleanup unavailable under current guards (safe defaults)";
+  }
+}
+
+/**
+ * @param {boolean} [includeRetention]
+ */
+async function refreshOps(includeRetention = true) {
+  let opsFailed = false;
+  try {
+    const ready = await getReady();
+    lastReady = ready;
+  } catch {
+    lastReady = null;
+    opsFailed = true;
+  }
+
+  try {
+    const status = await getOpsStatus();
+    lastOpsStatus = status;
+  } catch {
+    opsFailed = true;
+    // Keep previous lastOpsStatus for stale display.
+  }
+
+  const retentionVisible =
+    includeRetention &&
+    (!dom.opsDetails || dom.opsDetails.open !== false);
+
+  if (retentionVisible) {
+    try {
+      lastRetention = await getOpsRetention();
+    } catch {
+      opsFailed = true;
+    }
+  }
+
+  if (dom.opsStale) {
+    dom.opsStale.hidden = !opsFailed;
+  }
+
+  const overall = normalizeStatus(
+    lastOpsStatus && lastOpsStatus.status ? lastOpsStatus.status : "unknown"
+  );
+  if (dom.opsOverall) {
+    dom.opsOverall.textContent = overall;
+    dom.opsOverall.dataset.status = overall;
+  }
+  const readyLabel =
+    lastReady && lastReady.ready === true
+      ? "ready"
+      : lastReady && lastReady.ready === false
+        ? "not_ready"
+        : "unknown";
+  if (dom.opsReady) {
+    dom.opsReady.textContent = readyLabel;
+    dom.opsReady.dataset.status = readyLabel;
+  }
+  if (dom.statusOps) {
+    dom.statusOps.textContent = overall;
+  }
+
+  renderOpsComponents(dom.opsComponentList, lastOpsStatus, lastRetention);
+  renderOpsMetrics(dom.opsMetrics, lastOpsStatus, lastRetention);
+  renderRetentionPolicy(dom.opsRetentionPolicy, lastRetention);
+  renderRetentionLastRun(dom.opsRetentionLastRun, lastRetention);
+  updateOpsControlButtons();
+}
+
+function startOpsPolling() {
+  if (opsPollTimer != null) return;
+  opsPollTimer = setInterval(() => {
+    void refreshOps(true).catch(() => {
+      /* never break console */
+    });
+  }, 8000);
+}
+
+function wireOpsControls() {
+  if (dom.btnOpsDryRun) {
+    dom.btnOpsDryRun.addEventListener("click", async () => {
+      if (opsBusy || !canEnableDryRun(lastRetention)) return;
+      opsBusy = true;
+      updateOpsControlButtons();
+      setOpsActionStatus("Running dry-run…");
+      try {
+        const result = await postRetentionDryRun();
+        const exam = result?.summary?.rows_examined ?? "—";
+        const del = result?.summary?.rows_deleted ?? 0;
+        setOpsActionStatus(
+          `Dry-run complete · examined ${exam} · deleted ${del}`
+        );
+        await refreshOps(true);
+      } catch (err) {
+        setOpsActionStatus(
+          sanitizeMessage(err.message || "Dry-run failed")
+        );
+      } finally {
+        opsBusy = false;
+        updateOpsControlButtons();
+      }
+    });
+  }
+  if (dom.btnOpsCleanup) {
+    dom.btnOpsCleanup.addEventListener("click", async () => {
+      if (opsBusy || !canEnableDestructiveCleanup(lastRetention)) return;
+      const ok = window.confirm(DESTRUCTIVE_CONFIRM_TEXT);
+      if (!ok) {
+        setOpsActionStatus("Cleanup cancelled.");
+        return;
+      }
+      opsBusy = true;
+      updateOpsControlButtons();
+      setOpsActionStatus("Running cleanup…");
+      try {
+        const result = await postRetentionRun();
+        const del = result?.summary?.rows_deleted ?? "—";
+        setOpsActionStatus(`Cleanup complete · deleted ${del}`);
+        await refreshOps(true);
+      } catch (err) {
+        setOpsActionStatus(
+          sanitizeMessage(err.message || "Cleanup failed")
+        );
+      } finally {
+        opsBusy = false;
+        updateOpsControlButtons();
+      }
+    });
+  }
 }
 
 void init();

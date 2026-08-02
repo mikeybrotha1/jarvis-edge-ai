@@ -154,6 +154,153 @@ class NotificationsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class ObservationsRetentionPolicy:
+    """Observation row retention (v0.10.0 phase 3 — policy only).
+
+    Eligibility (not executed in phase 3): rows older than ``keep_days`` that
+    remain referentially safe with foreign keys. Does not delete active
+    checkpoint or recovery data.
+    """
+
+    enabled: bool = False
+    keep_days: int = 30
+
+
+@dataclass(frozen=True, slots=True)
+class EntitiesRetentionPolicy:
+    """Entity aggregate retention (**experimental** in v0.10.0).
+
+    Default remains ``enabled=False``. Deleting an entity triggers database
+    ``ON DELETE CASCADE`` for observations, snapshots, zone sessions, alerts,
+    and evaluator state (deliveries cascade via alerts). Eligibility is
+    narrowed so entities with any remaining alert or evaluator rows are never
+    selected; prune those domains first. Active entities and entities with
+    open zone sessions are never deleted.
+    """
+
+    enabled: bool = False
+    keep_closed_days: int = 90
+
+
+@dataclass(frozen=True, slots=True)
+class ZoneSessionsRetentionPolicy:
+    """Entity-zone session retention.
+
+    Eligibility: only **closed** sessions older than ``keep_closed_days``.
+    Open dwell sessions must never be deleted.
+    """
+
+    enabled: bool = False
+    keep_closed_days: int = 90
+
+
+@dataclass(frozen=True, slots=True)
+class AlertsRetentionPolicy:
+    """Alert row retention.
+
+    Eligibility: only **resolved** terminal alerts older than
+    ``keep_resolved_days``. Open and acknowledged (non-terminal) alerts must
+    never be deleted.
+    """
+
+    enabled: bool = False
+    keep_resolved_days: int = 90
+
+
+@dataclass(frozen=True, slots=True)
+class EvaluatorStateRetentionPolicy:
+    """Alert evaluator state retention.
+
+    Eligibility: only inactive/cleared evaluator state older than
+    ``keep_inactive_days``. Pending or triggered active conditions must never
+    be deleted. Checkpoint rows are out of scope.
+    """
+
+    enabled: bool = False
+    keep_inactive_days: int = 30
+
+
+@dataclass(frozen=True, slots=True)
+class NotificationDeliveriesRetentionPolicy:
+    """Notification delivery / attempt retention.
+
+    Eligibility: only terminal deliveries (``delivered`` / ``exhausted``)
+    older than ``keep_terminal_days``, plus related attempt history.
+    Pending/processing/failed (retry scheduled) must never be deleted.
+    """
+
+    enabled: bool = False
+    keep_terminal_days: int = 90
+
+
+@dataclass(frozen=True, slots=True)
+class RetentionConfig:
+    """Data lifecycle retention policy (v0.10.0).
+
+    Phase 3 ships **configuration only**. No worker, deletion engine, or
+    manual-run API is started from this model.
+
+    Defaults are safe for upgrade:
+    - global ``enabled=False``
+    - ``dry_run=True``
+    - every domain ``enabled=False``
+    - conservative keep periods
+
+    Planned execution model (phase 4+): dry-run first, fixed small batches,
+    one short transaction per batch, restart-safe, isolated from API/vision
+    paths. Checkpoint/recovery tables are not eligible for cleanup unless a
+    later design explicitly proves safety.
+    """
+
+    enabled: bool = False
+    dry_run: bool = True
+    interval_seconds: int = 86400
+    batch_size: int = 250
+    max_batches_per_run: int = 4
+    # Phase 5: explicit guard for POST /api/v1/ops/retention/run (default off).
+    allow_manual_destructive_run: bool = False
+    observations: ObservationsRetentionPolicy = field(
+        default_factory=ObservationsRetentionPolicy
+    )
+    entities: EntitiesRetentionPolicy = field(
+        default_factory=EntitiesRetentionPolicy
+    )
+    zone_sessions: ZoneSessionsRetentionPolicy = field(
+        default_factory=ZoneSessionsRetentionPolicy
+    )
+    alerts: AlertsRetentionPolicy = field(
+        default_factory=AlertsRetentionPolicy
+    )
+    evaluator_state: EvaluatorStateRetentionPolicy = field(
+        default_factory=EvaluatorStateRetentionPolicy
+    )
+    notification_deliveries: NotificationDeliveriesRetentionPolicy = field(
+        default_factory=NotificationDeliveriesRetentionPolicy
+    )
+
+    def any_domain_enabled(self) -> bool:
+        """True if at least one domain policy is enabled."""
+
+        return any(
+            (
+                self.observations.enabled,
+                self.entities.enabled,
+                self.zone_sessions.enabled,
+                self.alerts.enabled,
+                self.evaluator_state.enabled,
+                self.notification_deliveries.enabled,
+            )
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class OpsConfig:
+    """Operational observability and data lifecycle (v0.10.0)."""
+
+    retention: RetentionConfig = field(default_factory=RetentionConfig)
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -190,5 +337,6 @@ class AppConfig:
     notifications: NotificationsConfig = field(
         default_factory=NotificationsConfig
     )
+    ops: OpsConfig = field(default_factory=OpsConfig)
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

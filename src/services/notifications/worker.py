@@ -83,6 +83,8 @@ class NotificationDeliveryWorker:
         self.last_delivery_latency_ms: float | None = None
         self._latency_sum_ms = 0.0
         self._latency_count = 0
+        self._last_success_at: datetime | None = None
+        self._last_error_at: datetime | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -116,6 +118,8 @@ class NotificationDeliveryWorker:
             "retry_total": self.retry_total,
             "average_delivery_latency_ms": self.average_delivery_latency_ms,
             "last_delivery_latency_ms": self.last_delivery_latency_ms,
+            "last_success_at": self._last_success_at,
+            "last_error_at": self._last_error_at,
             "queue_depth_by_status": by_status,
         }
 
@@ -297,16 +301,19 @@ class NotificationDeliveryWorker:
             new_status = DeliveryStatus.DELIVERED
             next_at = None
             self.delivered_total += 1
+            self._last_success_at = now
         elif not result.retryable:
             new_status = DeliveryStatus.EXHAUSTED
             next_at = None
             self.exhausted_total += 1
             self.failed_total += 1
+            self._last_error_at = now
         elif attempt_number >= self.max_attempts:
             new_status = DeliveryStatus.EXHAUSTED
             next_at = None
             self.exhausted_total += 1
             self.failed_total += 1
+            self._last_error_at = now
         else:
             # failed = retry scheduled
             new_status = DeliveryStatus.FAILED
@@ -319,6 +326,7 @@ class NotificationDeliveryWorker:
             next_at = now + timedelta(seconds=delay)
             self.retry_total += 1
             self.failed_total += 1
+            self._last_error_at = now
 
         self._deliveries.record_attempt_and_update(
             delivery.id,

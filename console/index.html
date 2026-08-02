@@ -13,7 +13,7 @@
   <header class="top-bar" role="banner">
     <div class="brand">
       <h1>Jarvis Live Activity</h1>
-      <p class="subtitle">v0.9.0 console · notifications + alerts + spatial + REST + WebSocket</p>
+      <p class="subtitle">v0.10.0 console · ops + retention + notifications + alerts + spatial</p>
     </div>
     <div
       id="status-bar"
@@ -52,11 +52,48 @@
         <span class="status-label">Open alerts</span>
         <span class="status-value" id="status-alerts">—</span>
       </div>
+      <div class="status-item" data-status="ops">
+        <span class="status-label">Ops</span>
+        <span class="status-value" id="status-ops">—</span>
+      </div>
     </div>
   </header>
 
   <div class="layout">
     <aside class="filters-panel" aria-labelledby="filters-heading">
+      <section
+        id="ops-panel"
+        class="ops-panel"
+        aria-labelledby="ops-heading"
+      >
+        <details id="ops-details" class="zone-form-details" open>
+          <summary id="ops-heading">Operations</summary>
+          <p id="ops-stale" class="hint ops-stale" hidden>
+            Ops data may be stale (last poll failed).
+          </p>
+          <p id="ops-status-line" class="ops-overall" role="status">
+            Overall: <span id="ops-overall-status" class="ops-badge" data-status="unknown">unknown</span>
+            · Ready: <span id="ops-ready-status" class="ops-badge" data-status="unknown">unknown</span>
+          </p>
+          <ul id="ops-component-list" class="ops-component-list" role="list"></ul>
+          <h4>Metrics</h4>
+          <dl id="ops-metrics" class="ops-metrics"></dl>
+          <h4>Retention policy</h4>
+          <dl id="ops-retention-policy" class="ops-metrics"></dl>
+          <h4>Retention last run</h4>
+          <div id="ops-retention-last-run" class="ops-last-run hint">No run yet.</div>
+          <div class="filter-actions ops-actions">
+            <button type="button" id="btn-ops-dry-run" class="secondary">
+              Run dry-run
+            </button>
+            <button type="button" id="btn-ops-cleanup" class="secondary" disabled>
+              Run cleanup
+            </button>
+          </div>
+          <p id="ops-action-status" class="hint" role="status" aria-live="polite"></p>
+        </details>
+      </section>
+
       <h2 id="filters-heading">Filters</h2>
       <form id="filters-form" class="filters-form">
         <fieldset>

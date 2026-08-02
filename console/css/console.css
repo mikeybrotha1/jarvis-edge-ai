@@ -576,3 +576,120 @@ button:disabled {
   background: color-mix(in srgb, var(--ok) 22%, transparent);
   color: var(--ok);
 }
+
+/* —— Operations panel (v0.10.0) —— */
+.ops-panel {
+  margin-bottom: 1rem;
+}
+
+.ops-overall {
+  font-size: 0.9rem;
+  margin: 0.4rem 0 0.6rem;
+}
+
+.ops-badge {
+  display: inline-block;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: lowercase;
+  padding: 0.1rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--bg-elevated);
+  color: var(--text);
+}
+
+.ops-badge[data-status="healthy"],
+.ops-badge[data-status="ready"],
+.ops-badge[data-status="idle"] {
+  border-color: var(--ok);
+  color: var(--ok);
+}
+
+.ops-badge[data-status="degraded"],
+.ops-badge[data-status="running"],
+.ops-badge[data-status="not_ready"] {
+  border-color: var(--warn);
+  color: var(--warn);
+}
+
+.ops-badge[data-status="unavailable"] {
+  border-color: var(--error);
+  color: var(--error);
+}
+
+.ops-badge[data-status="disabled"],
+.ops-badge[data-status="unknown"] {
+  border-color: var(--text-muted);
+  color: var(--text-muted);
+}
+
+.ops-component-list {
+  list-style: none;
+  margin: 0 0 0.75rem;
+  padding: 0;
+}
+
+.ops-component-item {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 0.25rem 0.5rem;
+  padding: 0.35rem 0;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 70%, transparent);
+  font-size: 0.85rem;
+}
+
+.ops-component-name {
+  font-weight: 600;
+}
+
+.ops-component-detail {
+  grid-column: 1 / -1;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.ops-metrics {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr);
+  gap: 0.2rem 0.6rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+}
+
+.ops-metrics dt {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.ops-metrics dd {
+  margin: 0;
+  font-family: var(--mono);
+  word-break: break-word;
+}
+
+.ops-last-run {
+  white-space: pre-wrap;
+  font-family: var(--mono);
+  font-size: 0.78rem;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 0.5rem 0.65rem;
+  margin-bottom: 0.6rem;
+  max-height: 10rem;
+  overflow: auto;
+}
+
+.ops-actions {
+  margin-top: 0.4rem;
+}
+
+.ops-stale {
+  color: var(--warn);
+}
+
+#btn-ops-cleanup:not(:disabled) {
+  border-color: var(--error);
+  color: var(--error);
+}

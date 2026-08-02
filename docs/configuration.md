@@ -109,6 +109,7 @@ Scripts that use `load_database_settings()` still read **only**
 | Timeline | default limit `50`, maximum limit `200` |
 | Activity stream | enabled, channel `jarvis_activity`, observations off, throttle `1.0s`, queue `100`, max connections `25` |
 | Notifications | enabled, poll `1s`, max_attempts `5`, backoff `30s`×2.0 cap `1800s`, timeout `5s`, concurrency `3`, batch `50`, private targets off |
+| Ops retention | **disabled**, `dry_run=true`, interval `86400s`, batch `250`, max batches/run `4`; all domains disabled |
 | Logging | level `INFO`, file `logs/jarvis.log` |
 | Runtime | platform `raspberry_pi_5`, application `jarvis-edge-ai` |
 
@@ -134,6 +135,38 @@ Scripts that use `load_database_settings()` still read **only**
 | `JARVIS_NOTIFICATIONS_ENCRYPTION_KEY` | Fernet key for signing-secret encryption (not YAML) |
 
 See [outbound-notifications.md](outbound-notifications.md).
+
+### Ops retention environment variables (v0.10.0)
+
+| Variable | Config key |
+|----------|------------|
+| `JARVIS_OPS_RETENTION_ENABLED` | `ops.retention.enabled` |
+| `JARVIS_OPS_RETENTION_DRY_RUN` | `ops.retention.dry_run` |
+| `JARVIS_OPS_RETENTION_INTERVAL_SECONDS` | `ops.retention.interval_seconds` |
+| `JARVIS_OPS_RETENTION_BATCH_SIZE` | `ops.retention.batch_size` |
+| `JARVIS_OPS_RETENTION_MAX_BATCHES_PER_RUN` | `ops.retention.max_batches_per_run` |
+| `JARVIS_OPS_RETENTION_ALLOW_MANUAL_DESTRUCTIVE_RUN` | `ops.retention.allow_manual_destructive_run` |
+| `JARVIS_OPS_RETENTION_OBSERVATIONS_ENABLED` | `ops.retention.observations.enabled` |
+| `JARVIS_OPS_RETENTION_OBSERVATIONS_KEEP_DAYS` | `ops.retention.observations.keep_days` |
+| `JARVIS_OPS_RETENTION_ENTITIES_ENABLED` | `ops.retention.entities.enabled` |
+| `JARVIS_OPS_RETENTION_ENTITIES_KEEP_CLOSED_DAYS` | `ops.retention.entities.keep_closed_days` |
+| `JARVIS_OPS_RETENTION_ZONE_SESSIONS_ENABLED` | `ops.retention.zone_sessions.enabled` |
+| `JARVIS_OPS_RETENTION_ZONE_SESSIONS_KEEP_CLOSED_DAYS` | `ops.retention.zone_sessions.keep_closed_days` |
+| `JARVIS_OPS_RETENTION_ALERTS_ENABLED` | `ops.retention.alerts.enabled` |
+| `JARVIS_OPS_RETENTION_ALERTS_KEEP_RESOLVED_DAYS` | `ops.retention.alerts.keep_resolved_days` |
+| `JARVIS_OPS_RETENTION_EVALUATOR_STATE_ENABLED` | `ops.retention.evaluator_state.enabled` |
+| `JARVIS_OPS_RETENTION_EVALUATOR_STATE_KEEP_INACTIVE_DAYS` | `ops.retention.evaluator_state.keep_inactive_days` |
+| `JARVIS_OPS_RETENTION_NOTIFICATION_DELIVERIES_ENABLED` | `ops.retention.notification_deliveries.enabled` |
+| `JARVIS_OPS_RETENTION_NOTIFICATION_DELIVERIES_KEEP_TERMINAL_DAYS` | `ops.retention.notification_deliveries.keep_terminal_days` |
+
+Bounds: `interval_seconds` 60–604800; `batch_size` 1–1000; `max_batches_per_run` 1–100; keep-day fields 1–3650.
+
+See [data-retention.md](data-retention.md) and
+[operational-observability.md](operational-observability.md).
+
+Cleanup is **disabled by default** (`enabled=false`, domain flags false,
+`dry_run=true`, `allow_manual_destructive_run=false`). Entity retention is
+**experimental** and cascade-hardened.
 
 ## Validation
 

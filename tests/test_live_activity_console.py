@@ -113,9 +113,77 @@ def test_module_files_exist() -> None:
         CONSOLE_DIR / "js" / "recovery.js",
         CONSOLE_DIR / "js" / "ui.js",
         CONSOLE_DIR / "js" / "main.js",
+        CONSOLE_DIR / "js" / "ops.js",
     ]
     for path in expected:
         assert path.is_file(), path
+
+
+def test_ops_section_and_api_helpers_present() -> None:
+    html = (CONSOLE_DIR / "index.html").read_text(encoding="utf-8")
+    assert 'id="ops-panel"' in html
+    assert 'id="ops-component-list"' in html
+    assert 'id="btn-ops-dry-run"' in html
+    assert 'id="btn-ops-cleanup"' in html
+    assert "Operations" in html
+
+    api_js = (CONSOLE_DIR / "js" / "api.js").read_text(encoding="utf-8")
+    assert "getOpsStatus" in api_js
+    assert "getOpsRetention" in api_js
+    assert "getReady" in api_js
+    assert "postRetentionDryRun" in api_js
+    assert "postRetentionRun" in api_js
+    assert "/api/v1/ops/status" in api_js
+    assert "/api/v1/ops/retention/dry-run" in api_js
+    assert "/api/v1/ops/retention/run" in api_js
+
+    ops_js = (CONSOLE_DIR / "js" / "ops.js").read_text(encoding="utf-8")
+    assert "OPS_METRIC_ALLOWLIST" in ops_js
+    assert "canEnableDestructiveCleanup" in ops_js
+    assert "canEnableDryRun" in ops_js
+    assert "DESTRUCTIVE_CONFIRM_TEXT" in ops_js
+    assert "permanently delete" in ops_js.lower()
+    assert "healthy" in ops_js
+    assert "disabled" in ops_js
+    assert "unavailable" in ops_js
+
+    main_js = (CONSOLE_DIR / "js" / "main.js").read_text(encoding="utf-8")
+    assert "refreshOps" in main_js
+    assert "startOpsPolling" in main_js
+    assert "window.confirm" in main_js
+    assert "postRetentionDryRun" in main_js
+    assert "postRetentionRun" in main_js
+    # Polling failures must not block init
+    assert "must never block console" in main_js or "never break console" in main_js
+
+    css = (CONSOLE_DIR / "css" / "console.css").read_text(encoding="utf-8")
+    assert "ops-badge" in css
+    assert "ops-component-list" in css
+
+
+def test_ops_guard_logic_in_ops_js() -> None:
+    """Static checks for destructive button preconditions."""
+
+    ops_js = (CONSOLE_DIR / "js" / "ops.js").read_text(encoding="utf-8")
+    # Guard function body encodes safe defaults
+    assert "allow_manual_destructive_run" in ops_js
+    assert "destructive_permitted" in ops_js
+    assert "cooldown_remaining_seconds" in ops_js
+    assert "cycle_active" in ops_js
+    # Metrics are allow-listed, not free-form key dump
+    assert "OPS_METRIC_ALLOWLIST" in ops_js
+    assert "alert_consumer_queue_depth" in ops_js
+
+
+def test_console_serves_ops_js_asset() -> None:
+    app = _app()
+    with TestClient(app) as client:
+        response = client.get("/console/js/ops.js")
+        assert response.status_code == 200
+        assert b"canEnableDestructiveCleanup" in response.content
+        assert client.get("/console").status_code == 200
+        html = client.get("/console").text
+        assert "ops-panel" in html
 
 
 def test_no_unsafe_dynamic_innerhtml_patterns() -> None:
