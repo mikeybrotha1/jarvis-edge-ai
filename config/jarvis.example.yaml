@@ -99,3 +99,23 @@ alerts:
   max_metadata_bytes: 8192
   startup_catchup_limit: 500
   timezone_default: UTC
+
+# Outbound webhook notifications (v0.9.0)
+# Signing secrets require JARVIS_NOTIFICATIONS_ENCRYPTION_KEY (Fernet key).
+notifications:
+  enabled: true
+  worker_poll_interval_seconds: 1
+  max_attempts: 5
+  initial_backoff_seconds: 30
+  max_backoff_seconds: 1800
+  backoff_multiplier: 2.0
+  request_timeout_seconds: 5
+  max_concurrent_deliveries: 3
+  batch_size: 50
+  lock_timeout_seconds: 60
+  max_request_bytes: 65536
+  max_response_bytes: 8192
+  allow_private_targets: false
+  retention_days: 30
+  worker_id: jarvis-notification-worker
+  timezone_default: UTC

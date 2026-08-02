@@ -108,8 +108,32 @@ Scripts that use `load_database_settings()` still read **only**
 | API | disabled, host `0.0.0.0`, port `8080`, default limit `50`, maximum limit `200` |
 | Timeline | default limit `50`, maximum limit `200` |
 | Activity stream | enabled, channel `jarvis_activity`, observations off, throttle `1.0s`, queue `100`, max connections `25` |
+| Notifications | enabled, poll `1s`, max_attempts `5`, backoff `30s`×2.0 cap `1800s`, timeout `5s`, concurrency `3`, batch `50`, private targets off |
 | Logging | level `INFO`, file `logs/jarvis.log` |
 | Runtime | platform `raspberry_pi_5`, application `jarvis-edge-ai` |
+
+### Notifications environment variables
+
+| Variable | Config key |
+|----------|------------|
+| `JARVIS_NOTIFICATIONS_ENABLED` | `notifications.enabled` |
+| `JARVIS_NOTIFICATIONS_WORKER_POLL_INTERVAL_SECONDS` | `notifications.worker_poll_interval_seconds` |
+| `JARVIS_NOTIFICATIONS_MAX_ATTEMPTS` | `notifications.max_attempts` |
+| `JARVIS_NOTIFICATIONS_INITIAL_BACKOFF_SECONDS` | `notifications.initial_backoff_seconds` |
+| `JARVIS_NOTIFICATIONS_MAX_BACKOFF_SECONDS` | `notifications.max_backoff_seconds` |
+| `JARVIS_NOTIFICATIONS_BACKOFF_MULTIPLIER` | `notifications.backoff_multiplier` |
+| `JARVIS_NOTIFICATIONS_REQUEST_TIMEOUT_SECONDS` | `notifications.request_timeout_seconds` |
+| `JARVIS_NOTIFICATIONS_MAX_CONCURRENT_DELIVERIES` | `notifications.max_concurrent_deliveries` |
+| `JARVIS_NOTIFICATIONS_BATCH_SIZE` | `notifications.batch_size` |
+| `JARVIS_NOTIFICATIONS_LOCK_TIMEOUT_SECONDS` | `notifications.lock_timeout_seconds` |
+| `JARVIS_NOTIFICATIONS_MAX_REQUEST_BYTES` | `notifications.max_request_bytes` |
+| `JARVIS_NOTIFICATIONS_MAX_RESPONSE_BYTES` | `notifications.max_response_bytes` |
+| `JARVIS_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS` | `notifications.allow_private_targets` |
+| `JARVIS_NOTIFICATIONS_RETENTION_DAYS` | `notifications.retention_days` |
+| `JARVIS_NOTIFICATIONS_WORKER_ID` | `notifications.worker_id` |
+| `JARVIS_NOTIFICATIONS_ENCRYPTION_KEY` | Fernet key for signing-secret encryption (not YAML) |
+
+See [outbound-notifications.md](outbound-notifications.md).
 
 ## Validation
 

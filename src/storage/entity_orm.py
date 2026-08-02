@@ -25,9 +25,9 @@ from sqlalchemy import (
     String,
     func,
 )
-from sqlalchemy.dialects.postgresql import JSONB, UUID
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
-from sqlalchemy.types import JSON, TypeDecorator, Uuid
+from sqlalchemy.types import JSON, TypeDecorator
 
 
 class Base(DeclarativeBase):
@@ -35,26 +35,30 @@ class Base(DeclarativeBase):
 
 
 class PortableUUID(TypeDecorator):
-    """UUID type that works on PostgreSQL and SQLite test engines."""
+    """UUID identifiers stored as VARCHAR(36) on every dialect.
 
-    impl = Uuid
+    Matches Alembic / SQL migrations for entity memory, spatial, alerts, and
+    notifications (``sa.String(36)``), not native PostgreSQL ``UUID``.
+
+    Binding a ``uuid.UUID`` (or string) always produces a string parameter so
+    PostgreSQL never receives ``%(param)s::UUID`` against VARCHAR columns.
+    Python attributes still round-trip as ``uuid.UUID``.
+    """
+
+    impl = String(36)
     cache_ok = True
 
     def load_dialect_impl(self, dialect):  # type: ignore[no-untyped-def]
-        if dialect.name == "postgresql":
-            return dialect.type_descriptor(UUID(as_uuid=True))
+        # Always VARCHAR(36) — never dialect UUID — to match released schema.
         return dialect.type_descriptor(String(36))
 
     def process_bind_param(self, value, dialect):  # type: ignore[no-untyped-def]
         if value is None:
             return None
         if isinstance(value, uuid.UUID):
-            return str(value) if dialect.name != "postgresql" else value
-        return (
-            str(value)
-            if dialect.name != "postgresql"
-            else uuid.UUID(str(value))
-        )
+            return str(value)
+        # Normalize / validate string-like inputs (including UUID hex).
+        return str(uuid.UUID(str(value)))
 
     def process_result_value(self, value, dialect):  # type: ignore[no-untyped-def]
         if value is None:

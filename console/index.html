@@ -13,7 +13,7 @@
   <header class="top-bar" role="banner">
     <div class="brand">
       <h1>Jarvis Live Activity</h1>
-      <p class="subtitle">v0.8.0 console · alerts + spatial + REST + WebSocket</p>
+      <p class="subtitle">v0.9.0 console · notifications + alerts + spatial + REST + WebSocket</p>
     </div>
     <div
       id="status-bar"
@@ -208,6 +208,37 @@
             <p id="rule-form-status" class="hint" role="status"></p>
           </form>
         </details>
+        <h4 id="alert-deliveries-heading">Alert deliveries</h4>
+        <ul id="alert-delivery-list" class="entity-list" role="list"></ul>
+        <p id="alert-delivery-empty" class="hint">Select an alert to view deliveries.</p>
+        <button type="button" id="btn-delivery-retry" class="secondary" disabled>Retry delivery</button>
+      </section>
+
+      <section class="notifications-panel" aria-labelledby="notifications-heading">
+        <h3 id="notifications-heading">Notification targets</h3>
+        <ul id="target-list" class="entity-list" role="list"></ul>
+        <details class="zone-form-details" open>
+          <summary>Create / update webhook target</summary>
+          <form id="target-form" class="zone-form">
+            <input type="hidden" id="target-edit-id" value="" />
+            <label class="field"><span>Name</span><input type="text" id="target-name" required maxlength="128" autocomplete="off" /></label>
+            <label class="field"><span>Webhook URL</span><input type="url" id="target-url" required maxlength="2048" autocomplete="off" placeholder="https://example.com/hooks/jarvis" /></label>
+            <label class="check"><input type="checkbox" id="target-enabled" checked /><span>Enabled</span></label>
+            <label class="check"><input type="checkbox" id="target-global" /><span>Global target</span></label>
+            <label class="field"><span>Severity filters (comma-separated)</span><input type="text" id="target-severities" placeholder="warning,critical" autocomplete="off" /></label>
+            <label class="field"><span>Signing secret (set/replace)</span><input type="password" id="target-secret" maxlength="512" autocomplete="new-password" /></label>
+            <label class="field"><span>Associate with rule ID (optional)</span><input type="text" id="target-rule-id" autocomplete="off" placeholder="rule UUID" /></label>
+            <div class="filter-actions">
+              <button type="submit" id="btn-target-save">Save target</button>
+              <button type="button" id="btn-target-disable" class="secondary">Disable selected</button>
+              <button type="button" id="btn-target-reset" class="secondary">Reset form</button>
+            </div>
+            <p id="target-form-status" class="hint" role="status"></p>
+            <p id="target-secret-status" class="hint" aria-live="polite"></p>
+          </form>
+        </details>
+        <h4>Recent deliveries</h4>
+        <ul id="delivery-history-list" class="entity-list" role="list"></ul>
       </section>
 
       <section class="zones-panel" aria-labelledby="zones-heading">

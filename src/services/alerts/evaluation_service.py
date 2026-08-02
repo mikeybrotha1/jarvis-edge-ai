@@ -56,6 +56,7 @@ class AlertEvaluationService:
         *,
         activity_publisher: ActivityNotificationPublisher | None = None,
         session_repository: EntityZoneSessionRepository | None = None,
+        notification_enqueue: Any | None = None,
         evaluators: tuple[RuleEvaluator, ...] | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
@@ -65,6 +66,7 @@ class AlertEvaluationService:
         self._states = state_repository
         self._publisher = activity_publisher
         self._sessions = session_repository
+        self._notification_enqueue = notification_enqueue
         self._evaluators = evaluators or DEFAULT_EVALUATORS
         self._logger = logger or logging.getLogger(__name__)
 
@@ -282,6 +284,12 @@ class AlertEvaluationService:
                 event_type="alert_triggered",
                 occurred_at=alert.triggered_at,
             )
+        # Transactional outbox: matching delivery rows are durable alert
+        # bookkeeping in *this* session. Failures abort the alert transaction.
+        # No HTTP here — worker delivers only after commit.
+        self._enqueue_notification(
+            alert, event_type="alert_triggered", session=session, now=now
+        )
         return alert
 
     def _resolve_and_notify(
@@ -304,4 +312,32 @@ class AlertEvaluationService:
                 event_type="alert_resolved",
                 occurred_at=alert.resolved_at,
             )
+        if alert.status.value == "resolved":
+            self._enqueue_notification(
+                alert, event_type="alert_resolved", session=session, now=at
+            )
         return alert
+
+    def _enqueue_notification(
+        self,
+        alert: AlertRecord,
+        *,
+        event_type: str,
+        session: Session,
+        now: datetime,
+    ) -> None:
+        """Insert required outbox rows in the current alert transaction.
+
+        Local outbox persistence is part of durable alert bookkeeping and
+        must succeed or roll back with the alert. External HTTP delivery is
+        fully isolated and runs later in the notification worker.
+        """
+
+        if self._notification_enqueue is None:
+            return
+        self._notification_enqueue.enqueue_for_alert(
+            alert,
+            event_type=event_type,
+            session=session,
+            now=now,
+        )

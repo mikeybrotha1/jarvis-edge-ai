@@ -99,11 +99,13 @@ class AlertQueryService:
         *,
         session_factory: sessionmaker[Session] | None = None,
         activity_publisher: ActivityNotificationPublisher | None = None,
+        notification_enqueue: Any | None = None,
         logger: logging.Logger | None = None,
     ) -> None:
         self._alerts = alert_repository
         self._session_factory = session_factory
         self._publisher = activity_publisher
+        self._notification_enqueue = notification_enqueue
         self._logger = logger or logging.getLogger(__name__)
 
     def list_alerts(self, **kwargs: Any) -> PageResult:
@@ -145,7 +147,7 @@ class AlertQueryService:
 
     def resolve(self, alert_id: UUID) -> AlertRecord:
         now = datetime.now(timezone.utc)
-        if self._session_factory is None or self._publisher is None:
+        if self._session_factory is None:
             try:
                 return self._alerts.resolve(alert_id, at=now)
             except LookupError as error:
@@ -154,12 +156,24 @@ class AlertQueryService:
         try:
             with session_scope(self._session_factory) as session:
                 alert = self._alerts.resolve(alert_id, at=now, session=session)
-                if alert.resolved_at is not None:
+                if alert.resolved_at is not None and self._publisher is not None:
                     self._publisher.publish_spatial_event(
                         session,
                         event_id=f"alert-resolved:{alert.id}",
                         event_type="alert_resolved",
                         occurred_at=alert.resolved_at,
+                    )
+                if (
+                    alert.status.value == "resolved"
+                    and self._notification_enqueue is not None
+                ):
+                    # Same transaction as resolve: outbox insert failure rolls
+                    # back the resolve (transactional outbox guarantee).
+                    self._notification_enqueue.enqueue_for_alert(
+                        alert,
+                        event_type="alert_resolved",
+                        session=session,
+                        now=now,
                     )
                 return alert
         except LookupError as error:
