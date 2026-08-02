@@ -4,19 +4,26 @@
 
 import {
   acknowledgeAlert,
+  associateRuleTarget,
   createAlertRule,
+  createNotificationTarget,
   createZone,
   getActiveEntities,
+  getAlertDeliveries,
   getAlerts,
   getEntity,
   getHealth,
+  getNotificationDeliveries,
+  getNotificationTargets,
   getRecentEntities,
   getTimeline,
   getZoneOccupancy,
   getZoneSessions,
   getZones,
+  patchNotificationTarget,
   patchZone,
   resolveAlert,
+  retryNotificationDelivery,
   sanitizeMessage,
 } from "./api.js";
 import { createRecoveryController, filtersFromUi } from "./recovery.js";
@@ -83,6 +90,24 @@ const dom = {
   ruleEventType: document.getElementById("rule-event-type"),
   ruleSeverity: document.getElementById("rule-severity"),
   ruleFormStatus: document.getElementById("rule-form-status"),
+  alertDeliveryList: document.getElementById("alert-delivery-list"),
+  alertDeliveryEmpty: document.getElementById("alert-delivery-empty"),
+  btnDeliveryRetry: document.getElementById("btn-delivery-retry"),
+  targetList: document.getElementById("target-list"),
+  targetForm: document.getElementById("target-form"),
+  targetEditId: document.getElementById("target-edit-id"),
+  targetName: document.getElementById("target-name"),
+  targetUrl: document.getElementById("target-url"),
+  targetEnabled: document.getElementById("target-enabled"),
+  targetGlobal: document.getElementById("target-global"),
+  targetSeverities: document.getElementById("target-severities"),
+  targetSecret: document.getElementById("target-secret"),
+  targetRuleId: document.getElementById("target-rule-id"),
+  targetFormStatus: document.getElementById("target-form-status"),
+  targetSecretStatus: document.getElementById("target-secret-status"),
+  btnTargetDisable: document.getElementById("btn-target-disable"),
+  btnTargetReset: document.getElementById("btn-target-reset"),
+  deliveryHistoryList: document.getElementById("delivery-history-list"),
   status: {
     ws: {
       item: document.querySelector('[data-status="ws"]'),
@@ -119,6 +144,12 @@ const dom = {
 let selectedAlertId = null;
 /** @type {object[]} */
 let alertsCache = [];
+/** @type {string|null} */
+let selectedTargetId = null;
+/** @type {string|null} */
+let selectedDeliveryId = null;
+/** @type {object[]} */
+let targetsCache = [];
 
 /** @type {object} */
 let uiFilters = {
@@ -652,6 +683,57 @@ async function loadZoneDetails(zoneId) {
   }
 }
 
+function statusBadge(status) {
+  const s = String(status || "unknown");
+  return `[${s}]`;
+}
+
+async function loadAlertDeliveries(alertId) {
+  if (!dom.alertDeliveryList) return;
+  while (dom.alertDeliveryList.firstChild) {
+    dom.alertDeliveryList.removeChild(dom.alertDeliveryList.firstChild);
+  }
+  selectedDeliveryId = null;
+  if (dom.btnDeliveryRetry) dom.btnDeliveryRetry.disabled = true;
+  if (!alertId) {
+    if (dom.alertDeliveryEmpty) {
+      dom.alertDeliveryEmpty.textContent = "Select an alert to view deliveries.";
+      dom.alertDeliveryEmpty.hidden = false;
+    }
+    return;
+  }
+  try {
+    const page = await getAlertDeliveries(alertId, { limit: 20 });
+    const items = Array.isArray(page.items) ? page.items : [];
+    if (dom.alertDeliveryEmpty) {
+      dom.alertDeliveryEmpty.hidden = items.length > 0;
+      dom.alertDeliveryEmpty.textContent = items.length
+        ? ""
+        : "No deliveries for this alert.";
+    }
+    for (const d of items) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const name = d.target_name || d.target_id || "?";
+      btn.textContent = `${statusBadge(d.status)} ${d.event_type || "?"} → ${name} · attempts ${d.attempts ?? 0}`;
+      btn.addEventListener("click", () => {
+        selectedDeliveryId = String(d.id);
+        const retryable = d.status === "failed" || d.status === "exhausted";
+        if (dom.btnDeliveryRetry) dom.btnDeliveryRetry.disabled = !retryable;
+      });
+      li.appendChild(btn);
+      dom.alertDeliveryList.appendChild(li);
+    }
+  } catch (err) {
+    if (dom.alertDeliveryEmpty) {
+      dom.alertDeliveryEmpty.hidden = false;
+      dom.alertDeliveryEmpty.textContent = "Failed to load deliveries.";
+    }
+    showWarning(sanitizeMessage(err.message || "Failed to load deliveries"));
+  }
+}
+
 async function loadAlerts() {
   if (!dom.alertList) return;
   try {
@@ -670,13 +752,80 @@ async function loadAlerts() {
         }
         if (dom.btnAlertAck) dom.btnAlertAck.disabled = false;
         if (dom.btnAlertResolve) dom.btnAlertResolve.disabled = false;
+        loadAlertDeliveries(selectedAlertId);
       });
       li.appendChild(btn);
       dom.alertList.appendChild(li);
     }
+    if (selectedAlertId) {
+      await loadAlertDeliveries(selectedAlertId);
+    }
     refreshStatus();
   } catch (err) {
     showWarning(sanitizeMessage(err.message || "Failed to load alerts"));
+  }
+}
+
+async function loadTargets() {
+  if (!dom.targetList) return;
+  try {
+    const page = await getNotificationTargets({ limit: 50 });
+    targetsCache = Array.isArray(page.items) ? page.items : [];
+    while (dom.targetList.firstChild) {
+      dom.targetList.removeChild(dom.targetList.firstChild);
+    }
+    for (const t of targetsCache) {
+      const li = document.createElement("li");
+      const btn = document.createElement("button");
+      btn.type = "button";
+      const flags = [
+        t.enabled ? "on" : "off",
+        t.is_global ? "global" : "rule",
+        t.has_signing_secret ? "signed" : "unsigned",
+      ].join(" · ");
+      btn.textContent = `${t.name || "?"} · ${flags}`;
+      btn.addEventListener("click", () => {
+        selectedTargetId = String(t.id);
+        if (dom.targetEditId) dom.targetEditId.value = String(t.id);
+        if (dom.targetName) dom.targetName.value = t.name || "";
+        if (dom.targetUrl) dom.targetUrl.value = t.url || "";
+        if (dom.targetEnabled) dom.targetEnabled.checked = !!t.enabled;
+        if (dom.targetGlobal) dom.targetGlobal.checked = !!t.is_global;
+        if (dom.targetSeverities) {
+          dom.targetSeverities.value = Array.isArray(t.severity_filters)
+            ? t.severity_filters.join(",")
+            : "";
+        }
+        if (dom.targetSecret) dom.targetSecret.value = "";
+        if (dom.targetSecretStatus) {
+          dom.targetSecretStatus.textContent = t.has_signing_secret
+            ? "Signing secret is set (value never shown)."
+            : "No signing secret set.";
+        }
+      });
+      li.appendChild(btn);
+      dom.targetList.appendChild(li);
+    }
+  } catch (err) {
+    showWarning(sanitizeMessage(err.message || "Failed to load targets"));
+  }
+}
+
+async function loadDeliveryHistory() {
+  if (!dom.deliveryHistoryList) return;
+  try {
+    const page = await getNotificationDeliveries({ limit: 20, sort: "desc" });
+    const items = Array.isArray(page.items) ? page.items : [];
+    while (dom.deliveryHistoryList.firstChild) {
+      dom.deliveryHistoryList.removeChild(dom.deliveryHistoryList.firstChild);
+    }
+    for (const d of items) {
+      const li = document.createElement("li");
+      li.textContent = `${statusBadge(d.status)} ${d.event_type || "?"} · alert ${String(d.alert_id || "").slice(0, 8)}… · attempts ${d.attempts ?? 0}`;
+      dom.deliveryHistoryList.appendChild(li);
+    }
+  } catch {
+    /* non-fatal */
   }
 }
 
@@ -711,6 +860,93 @@ async function init() {
       }
     });
   }
+  if (dom.btnDeliveryRetry) {
+    dom.btnDeliveryRetry.addEventListener("click", async () => {
+      if (!selectedDeliveryId) return;
+      try {
+        await retryNotificationDelivery(selectedDeliveryId);
+        if (selectedAlertId) await loadAlertDeliveries(selectedAlertId);
+        await loadDeliveryHistory();
+      } catch (err) {
+        showWarning(sanitizeMessage(err.message || "Retry failed"));
+      }
+    });
+  }
+
+  if (dom.targetForm) {
+    dom.targetForm.addEventListener("submit", async (ev) => {
+      ev.preventDefault();
+      try {
+        const severities = (dom.targetSeverities?.value || "")
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean);
+        const body = {
+          name: dom.targetName?.value || "",
+          url: dom.targetUrl?.value || "",
+          enabled: !!dom.targetEnabled?.checked,
+          is_global: !!dom.targetGlobal?.checked,
+          severity_filters: severities,
+        };
+        const secret = dom.targetSecret?.value || "";
+        if (secret) body.signing_secret = secret;
+        const editId = dom.targetEditId?.value || "";
+        let saved;
+        if (editId) {
+          saved = await patchNotificationTarget(editId, body);
+        } else {
+          saved = await createNotificationTarget(body);
+        }
+        const ruleId = (dom.targetRuleId?.value || "").trim();
+        if (ruleId && saved?.id) {
+          await associateRuleTarget(ruleId, saved.id);
+        }
+        if (dom.targetSecret) dom.targetSecret.value = "";
+        if (dom.targetFormStatus) {
+          dom.targetFormStatus.textContent = editId ? "Target updated." : "Target created.";
+        }
+        if (dom.targetSecretStatus) {
+          dom.targetSecretStatus.textContent = saved?.has_signing_secret
+            ? "Signing secret is set (value never shown)."
+            : "No signing secret set.";
+        }
+        await loadTargets();
+      } catch (err) {
+        if (dom.targetFormStatus) {
+          dom.targetFormStatus.textContent = sanitizeMessage(
+            err.message || "Save failed"
+          );
+        }
+        showWarning(sanitizeMessage(err.message || "Target save failed"));
+      }
+    });
+  }
+  if (dom.btnTargetDisable) {
+    dom.btnTargetDisable.addEventListener("click", async () => {
+      const id = dom.targetEditId?.value || selectedTargetId;
+      if (!id) return;
+      try {
+        await patchNotificationTarget(id, { enabled: false });
+        await loadTargets();
+        if (dom.targetFormStatus) {
+          dom.targetFormStatus.textContent = "Target disabled.";
+        }
+      } catch (err) {
+        showWarning(sanitizeMessage(err.message || "Disable failed"));
+      }
+    });
+  }
+  if (dom.btnTargetReset) {
+    dom.btnTargetReset.addEventListener("click", () => {
+      selectedTargetId = null;
+      if (dom.targetEditId) dom.targetEditId.value = "";
+      if (dom.targetForm) dom.targetForm.reset();
+      if (dom.targetEnabled) dom.targetEnabled.checked = true;
+      if (dom.targetSecretStatus) dom.targetSecretStatus.textContent = "";
+      if (dom.targetFormStatus) dom.targetFormStatus.textContent = "";
+    });
+  }
+
   if (dom.alertRuleForm) {
     dom.alertRuleForm.addEventListener("submit", async (ev) => {
       ev.preventDefault();
@@ -739,6 +975,8 @@ async function init() {
   await loadEntityLists();
   await loadZones();
   await loadAlerts();
+  await loadTargets();
+  await loadDeliveryHistory();
   socket.start();
   applyWsSubscription();
   refreshStatus();

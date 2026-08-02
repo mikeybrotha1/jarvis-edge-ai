@@ -133,6 +133,27 @@ class AlertsConfig:
 
 
 @dataclass(frozen=True, slots=True)
+class NotificationsConfig:
+    """Outbound webhook notification delivery (v0.9.0)."""
+
+    enabled: bool = True
+    worker_poll_interval_seconds: float = 1.0
+    max_attempts: int = 5
+    initial_backoff_seconds: float = 30.0
+    max_backoff_seconds: float = 1800.0
+    backoff_multiplier: float = 2.0
+    request_timeout_seconds: float = 5.0
+    max_concurrent_deliveries: int = 3
+    batch_size: int = 50
+    lock_timeout_seconds: float = 60.0
+    max_request_bytes: int = 65536
+    max_response_bytes: int = 8192
+    allow_private_targets: bool = False
+    retention_days: int = 30
+    worker_id: str = "jarvis-notification-worker"
+
+
+@dataclass(frozen=True, slots=True)
 class LoggingConfig:
     """Application logging settings."""
 
@@ -166,5 +187,8 @@ class AppConfig:
     )
     spatial: SpatialConfig = field(default_factory=SpatialConfig)
     alerts: AlertsConfig = field(default_factory=AlertsConfig)
+    notifications: NotificationsConfig = field(
+        default_factory=NotificationsConfig
+    )
     logging: LoggingConfig = field(default_factory=LoggingConfig)
     runtime: RuntimeConfig = field(default_factory=RuntimeConfig)

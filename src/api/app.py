@@ -21,6 +21,12 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from api.activity_ws import router as activity_ws_router
 from api.alert_routes import alerts_router, rules_router
 from api.entity_routes import router as entity_router
+from api.notification_routes import (
+    alert_deliveries_router,
+    deliveries_router,
+    rule_targets_router,
+    targets_router,
+)
 from api.schemas import HealthOut
 from api.timeline_routes import entity_timeline_router, router as timeline_router
 from api.zone_routes import entity_zones_router, router as zone_router
@@ -31,6 +37,12 @@ from services.alerts.due_reconciler import AlertDueReconciler
 from services.alerts.evaluation_service import AlertEvaluationService
 from services.alerts.rule_service import AlertQueryService, AlertRuleService
 from services.entity_query_service import EntityQueryService, QueryLimits
+from services.notifications.delivery_service import NotificationDeliveryQueryService
+from services.notifications.enqueue import NotificationEnqueueService
+from services.notifications.registry import NotificationProviderRegistry
+from services.notifications.target_service import NotificationTargetService
+from services.notifications.webhook_provider import WebhookNotificationProvider
+from services.notifications.worker import NotificationDeliveryWorker
 from services.timeline_service import TimelineLimits, TimelineService
 from services.zone_query_service import ZoneQueryLimits, ZoneQueryService
 from storage.activity_notify import ActivityNotificationPublisher
@@ -42,6 +54,11 @@ from storage.alert_repositories import (
 )
 from storage.entity_repository import EntityRepository
 from storage.entity_zone_session_repository import EntityZoneSessionRepository
+from storage.notification_repositories import (
+    NotificationDeliveryRepository,
+    NotificationTargetRepository,
+    RuleNotificationTargetRepository,
+)
 from storage.observation_repository import ObservationRepository
 from storage.sqlalchemy_db import (
     create_entity_engine,
@@ -69,6 +86,7 @@ def create_app(
     activity_listener: ActivityNotificationListener | None = None,
     enable_activity_stream: bool | None = None,
     alerts_config: Any | None = None,
+    notifications_config: Any | None = None,
     create_schema: bool = False,
     title: str = "Jarvis Edge AI Entity Query API",
 ) -> FastAPI:
@@ -123,6 +141,7 @@ def create_app(
 
         alert_consumer = getattr(app.state, "alert_consumer", None)
         alert_reconciler = getattr(app.state, "alert_reconciler", None)
+        notification_worker = getattr(app.state, "notification_worker", None)
         if alert_consumer is not None:
             try:
                 await alert_consumer.start()
@@ -134,9 +153,17 @@ def create_app(
                 await alert_reconciler.start()
             except Exception:
                 logger.exception("Failed to start alert due reconciler")
+        if notification_worker is not None:
+            try:
+                await notification_worker.start()
+                await notification_worker.wait_until_ready(timeout=10.0)
+            except Exception:
+                logger.exception("Failed to start notification delivery worker")
 
         yield
 
+        if notification_worker is not None:
+            await notification_worker.stop()
         if alert_reconciler is not None:
             await alert_reconciler.stop()
         if alert_consumer is not None:
@@ -155,7 +182,7 @@ def create_app(
 
     app = FastAPI(
         title=title,
-        version="0.8.0",
+        version="0.9.0",
         lifespan=lifespan,
     )
 
@@ -295,11 +322,15 @@ def create_app(
 
     # Alert subsystem (separate from core vision transactions).
     alerts_cfg = alerts_config
+    notif_cfg = notifications_config
     factory_for_alerts = getattr(app.state, "session_factory", None)
     alert_rule_service = None
     alert_query_service = None
     alert_consumer = None
     alert_reconciler = None
+    notification_target_service = None
+    notification_delivery_service = None
+    notification_worker = None
     if factory_for_alerts is not None:
         rule_repo = AlertRuleRepository(factory_for_alerts)
         alert_repo = AlertRepository(factory_for_alerts)
@@ -332,12 +363,111 @@ def create_app(
             ),
             logger=logger,
         )
+        # Notification outbox + webhook worker (v0.9.0).
+        # allow_private_targets must flow from NotificationsConfig into both
+        # target CRUD SSRF validation and delivery-time WebhookNotificationProvider.
+        target_repo = NotificationTargetRepository(factory_for_alerts)
+        assoc_repo = RuleNotificationTargetRepository(factory_for_alerts)
+        delivery_repo = NotificationDeliveryRepository(factory_for_alerts)
+        allow_private = _notifications_allow_private(notif_cfg)
+        notification_target_service = NotificationTargetService(
+            target_repo,
+            assoc_repo,
+            allow_private_targets=allow_private,
+            max_metadata_bytes=max_meta,
+            logger=logger,
+        )
+        notification_delivery_service = NotificationDeliveryQueryService(
+            delivery_repo, logger=logger
+        )
+        enqueue = NotificationEnqueueService(
+            target_repo, delivery_repo, logger=logger
+        )
         alert_query_service = AlertQueryService(
             alert_repo,
             session_factory=factory_for_alerts,
             activity_publisher=alert_publisher,
+            notification_enqueue=enqueue,
             logger=logger,
         )
+        provider_registry = NotificationProviderRegistry()
+        provider_registry.register(
+            WebhookNotificationProvider(
+                request_timeout_seconds=float(
+                    getattr(notif_cfg, "request_timeout_seconds", 5.0)
+                    if notif_cfg is not None
+                    else 5.0
+                ),
+                max_request_bytes=int(
+                    getattr(notif_cfg, "max_request_bytes", 65536)
+                    if notif_cfg is not None
+                    else 65536
+                ),
+                max_response_bytes=int(
+                    getattr(notif_cfg, "max_response_bytes", 8192)
+                    if notif_cfg is not None
+                    else 8192
+                ),
+                allow_private_targets=allow_private,
+                logger=logger,
+            )
+        )
+        notif_enabled = (
+            bool(notif_cfg.enabled) if notif_cfg is not None else True
+        )
+        notification_worker = NotificationDeliveryWorker(
+            delivery_repo,
+            target_repo,
+            provider_registry,
+            enabled=notif_enabled,
+            worker_id=str(
+                getattr(notif_cfg, "worker_id", "jarvis-notification-worker")
+                if notif_cfg is not None
+                else "jarvis-notification-worker"
+            ),
+            poll_interval_seconds=float(
+                getattr(notif_cfg, "worker_poll_interval_seconds", 1.0)
+                if notif_cfg is not None
+                else 1.0
+            ),
+            max_attempts=int(
+                getattr(notif_cfg, "max_attempts", 5)
+                if notif_cfg is not None
+                else 5
+            ),
+            initial_backoff_seconds=float(
+                getattr(notif_cfg, "initial_backoff_seconds", 30.0)
+                if notif_cfg is not None
+                else 30.0
+            ),
+            max_backoff_seconds=float(
+                getattr(notif_cfg, "max_backoff_seconds", 1800.0)
+                if notif_cfg is not None
+                else 1800.0
+            ),
+            backoff_multiplier=float(
+                getattr(notif_cfg, "backoff_multiplier", 2.0)
+                if notif_cfg is not None
+                else 2.0
+            ),
+            batch_size=int(
+                getattr(notif_cfg, "batch_size", 50)
+                if notif_cfg is not None
+                else 50
+            ),
+            max_concurrent_deliveries=int(
+                getattr(notif_cfg, "max_concurrent_deliveries", 3)
+                if notif_cfg is not None
+                else 3
+            ),
+            lock_timeout_seconds=float(
+                getattr(notif_cfg, "lock_timeout_seconds", 60.0)
+                if notif_cfg is not None
+                else 60.0
+            ),
+            logger=logger,
+        )
+
         evaluation = AlertEvaluationService(
             factory_for_alerts,
             rule_repo,
@@ -345,6 +475,7 @@ def create_app(
             state_repo,
             activity_publisher=alert_publisher,
             session_repository=session_repo,
+            notification_enqueue=enqueue,
             logger=logger,
         )
         alerts_enabled = (
@@ -398,6 +529,13 @@ def create_app(
     app.state.alert_consumer = alert_consumer
     app.state.alert_reconciler = alert_reconciler
     app.state.alerts_config = alerts_cfg
+    app.state.notification_target_service = notification_target_service
+    app.state.notification_delivery_service = notification_delivery_service
+    app.state.notification_worker = notification_worker
+    app.state.notifications_config = notif_cfg
+    app.state.notifications_allow_private_targets = (
+        _notifications_allow_private(notif_cfg)
+    )
 
     app.include_router(entity_router)
     app.include_router(entity_timeline_router)
@@ -406,6 +544,10 @@ def create_app(
     app.include_router(zone_router)
     app.include_router(rules_router)
     app.include_router(alerts_router)
+    app.include_router(targets_router)
+    app.include_router(deliveries_router)
+    app.include_router(rule_targets_router)
+    app.include_router(alert_deliveries_router)
     app.include_router(activity_ws_router)
 
     _mount_live_activity_console(app)
@@ -523,6 +665,10 @@ def build_app_from_loaded_config(
         maximum_limit=app_config.api.maximum_limit,
         maximum_zones_per_camera=app_config.spatial.maximum_zones_per_camera,
     )
+    # Pass NotificationsConfig explicitly (same object load_app_config built).
+    # Do not default-construct a second NotificationsConfig here — that would
+    # drop env overrides such as JARVIS_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS.
+    notifications = getattr(app_config, "notifications", None)
     return create_app(
         database_url=app_config.database.url,
         limits=limits,
@@ -530,6 +676,7 @@ def build_app_from_loaded_config(
         zone_limits=zone_limits,
         activity_stream_config=app_config.activity_stream,
         alerts_config=app_config.alerts,
+        notifications_config=notifications,
         create_schema=create_schema,
     )
 
@@ -540,3 +687,11 @@ def create_app_from_config() -> FastAPI:
     from config import load_app_config
 
     return build_app_from_loaded_config(load_app_config())
+
+
+def _notifications_allow_private(notif_cfg: Any | None) -> bool:
+    """Read allow_private_targets from NotificationsConfig (default False)."""
+
+    if notif_cfg is None:
+        return False
+    return bool(getattr(notif_cfg, "allow_private_targets", False))

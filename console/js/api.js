@@ -226,6 +226,64 @@ export function resolveAlert(alertId) {
   );
 }
 
+export function getNotificationTargets(filters = {}) {
+  return apiGet("/api/v1/notification-targets", {
+    enabled: filters.enabled,
+    is_global: filters.is_global,
+    limit: filters.limit ?? 50,
+    offset: filters.offset ?? 0,
+  });
+}
+
+export function createNotificationTarget(body) {
+  return apiSend("/api/v1/notification-targets", "POST", body);
+}
+
+export function patchNotificationTarget(targetId, body) {
+  return apiSend(
+    `/api/v1/notification-targets/${encodeURIComponent(targetId)}`,
+    "PATCH",
+    body
+  );
+}
+
+export function associateRuleTarget(ruleId, targetId) {
+  return apiSend(
+    `/api/v1/alert-rules/${encodeURIComponent(ruleId)}/notification-targets/${encodeURIComponent(targetId)}`,
+    "POST",
+    {}
+  );
+}
+
+export function getAlertDeliveries(alertId, filters = {}) {
+  return apiGet(
+    `/api/v1/alerts/${encodeURIComponent(alertId)}/deliveries`,
+    {
+      limit: filters.limit ?? 50,
+      offset: filters.offset ?? 0,
+    }
+  );
+}
+
+export function getNotificationDeliveries(filters = {}) {
+  return apiGet("/api/v1/notification-deliveries", {
+    status: filters.status || undefined,
+    alert_id: filters.alert_id || undefined,
+    target_id: filters.target_id || undefined,
+    limit: filters.limit ?? 50,
+    offset: filters.offset ?? 0,
+    sort: filters.sort ?? "desc",
+  });
+}
+
+export function retryNotificationDelivery(deliveryId) {
+  return apiSend(
+    `/api/v1/notification-deliveries/${encodeURIComponent(deliveryId)}/retry`,
+    "POST",
+    {}
+  );
+}
+
 /**
  * @param {string} path
  * @param {string} method

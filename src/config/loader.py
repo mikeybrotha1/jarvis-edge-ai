@@ -27,6 +27,7 @@ from config.models import (
     EntityMemoryConfig,
     LoggingConfig,
     MemoryConfig,
+    NotificationsConfig,
     RuntimeConfig,
     SpatialConfig,
     TimelineConfig,
@@ -114,6 +115,25 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "max_metadata_bytes",
             "startup_catchup_limit",
             "timezone_default",
+        }
+    ),
+    "notifications": frozenset(
+        {
+            "enabled",
+            "worker_poll_interval_seconds",
+            "max_attempts",
+            "initial_backoff_seconds",
+            "max_backoff_seconds",
+            "backoff_multiplier",
+            "request_timeout_seconds",
+            "max_concurrent_deliveries",
+            "batch_size",
+            "lock_timeout_seconds",
+            "max_request_bytes",
+            "max_response_bytes",
+            "allow_private_targets",
+            "retention_days",
+            "worker_id",
         }
     ),
     "logging": frozenset({"level", "log_file"}),
@@ -289,6 +309,35 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "max_metadata_bytes": defaults.alerts.max_metadata_bytes,
             "startup_catchup_limit": defaults.alerts.startup_catchup_limit,
             "timezone_default": defaults.alerts.timezone_default,
+        },
+        "notifications": {
+            "enabled": defaults.notifications.enabled,
+            "worker_poll_interval_seconds": (
+                defaults.notifications.worker_poll_interval_seconds
+            ),
+            "max_attempts": defaults.notifications.max_attempts,
+            "initial_backoff_seconds": (
+                defaults.notifications.initial_backoff_seconds
+            ),
+            "max_backoff_seconds": defaults.notifications.max_backoff_seconds,
+            "backoff_multiplier": defaults.notifications.backoff_multiplier,
+            "request_timeout_seconds": (
+                defaults.notifications.request_timeout_seconds
+            ),
+            "max_concurrent_deliveries": (
+                defaults.notifications.max_concurrent_deliveries
+            ),
+            "batch_size": defaults.notifications.batch_size,
+            "lock_timeout_seconds": (
+                defaults.notifications.lock_timeout_seconds
+            ),
+            "max_request_bytes": defaults.notifications.max_request_bytes,
+            "max_response_bytes": defaults.notifications.max_response_bytes,
+            "allow_private_targets": (
+                defaults.notifications.allow_private_targets
+            ),
+            "retention_days": defaults.notifications.retention_days,
+            "worker_id": defaults.notifications.worker_id,
         },
         "logging": {
             "level": defaults.logging.level,
@@ -730,6 +779,111 @@ def _apply_env_overrides(
         environ,
         "JARVIS_ALERTS_TIMEZONE_DEFAULT",
     )
+    _set_env_bool(
+        values,
+        "notifications",
+        "enabled",
+        environ,
+        "JARVIS_NOTIFICATIONS_ENABLED",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "worker_poll_interval_seconds",
+        environ,
+        "JARVIS_NOTIFICATIONS_WORKER_POLL_INTERVAL_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "max_attempts",
+        environ,
+        "JARVIS_NOTIFICATIONS_MAX_ATTEMPTS",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "initial_backoff_seconds",
+        environ,
+        "JARVIS_NOTIFICATIONS_INITIAL_BACKOFF_SECONDS",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "max_backoff_seconds",
+        environ,
+        "JARVIS_NOTIFICATIONS_MAX_BACKOFF_SECONDS",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "backoff_multiplier",
+        environ,
+        "JARVIS_NOTIFICATIONS_BACKOFF_MULTIPLIER",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "request_timeout_seconds",
+        environ,
+        "JARVIS_NOTIFICATIONS_REQUEST_TIMEOUT_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "max_concurrent_deliveries",
+        environ,
+        "JARVIS_NOTIFICATIONS_MAX_CONCURRENT_DELIVERIES",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "batch_size",
+        environ,
+        "JARVIS_NOTIFICATIONS_BATCH_SIZE",
+    )
+    _set_env_float(
+        values,
+        "notifications",
+        "lock_timeout_seconds",
+        environ,
+        "JARVIS_NOTIFICATIONS_LOCK_TIMEOUT_SECONDS",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "max_request_bytes",
+        environ,
+        "JARVIS_NOTIFICATIONS_MAX_REQUEST_BYTES",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "max_response_bytes",
+        environ,
+        "JARVIS_NOTIFICATIONS_MAX_RESPONSE_BYTES",
+    )
+    _set_env_bool(
+        values,
+        "notifications",
+        "allow_private_targets",
+        environ,
+        "JARVIS_NOTIFICATIONS_ALLOW_PRIVATE_TARGETS",
+    )
+    _set_env_int(
+        values,
+        "notifications",
+        "retention_days",
+        environ,
+        "JARVIS_NOTIFICATIONS_RETENTION_DAYS",
+    )
+    _set_env_string(
+        values,
+        "notifications",
+        "worker_id",
+        environ,
+        "JARVIS_NOTIFICATIONS_WORKER_ID",
+    )
     _set_env_string(
         values,
         "logging",
@@ -1140,6 +1294,109 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
                 "alerts.timezone_default must be a valid IANA timezone."
             )
 
+    notif_enabled = values["notifications"]["enabled"]
+    if not isinstance(notif_enabled, bool):
+        errors.append("notifications.enabled must be a boolean.")
+    worker_id = values["notifications"]["worker_id"]
+    if not isinstance(worker_id, str) or not worker_id.strip():
+        errors.append("notifications.worker_id must be a non-empty string.")
+    allow_private = values["notifications"]["allow_private_targets"]
+    if not isinstance(allow_private, bool):
+        errors.append(
+            "notifications.allow_private_targets must be a boolean."
+        )
+    for field_name in (
+        "max_attempts",
+        "max_concurrent_deliveries",
+        "batch_size",
+        "max_request_bytes",
+        "max_response_bytes",
+        "retention_days",
+    ):
+        value = values["notifications"][field_name]
+        if not _is_int(value) or int(value) < 1:
+            errors.append(
+                f"notifications.{field_name} must be an integer >= 1."
+            )
+    if (
+        _is_int(values["notifications"]["max_attempts"])
+        and int(values["notifications"]["max_attempts"]) > 50
+    ):
+        errors.append("notifications.max_attempts must be <= 50.")
+    if (
+        _is_int(values["notifications"]["max_concurrent_deliveries"])
+        and int(values["notifications"]["max_concurrent_deliveries"]) > 50
+    ):
+        errors.append(
+            "notifications.max_concurrent_deliveries must be <= 50."
+        )
+    if (
+        _is_int(values["notifications"]["batch_size"])
+        and int(values["notifications"]["batch_size"]) > 500
+    ):
+        errors.append("notifications.batch_size must be <= 500.")
+    if (
+        _is_int(values["notifications"]["max_request_bytes"])
+        and int(values["notifications"]["max_request_bytes"]) > 1_048_576
+    ):
+        errors.append(
+            "notifications.max_request_bytes must be <= 1048576."
+        )
+    if (
+        _is_int(values["notifications"]["max_response_bytes"])
+        and int(values["notifications"]["max_response_bytes"]) > 1_048_576
+    ):
+        errors.append(
+            "notifications.max_response_bytes must be <= 1048576."
+        )
+    if (
+        _is_int(values["notifications"]["retention_days"])
+        and int(values["notifications"]["retention_days"]) > 3650
+    ):
+        errors.append("notifications.retention_days must be <= 3650.")
+    for field_name in (
+        "worker_poll_interval_seconds",
+        "initial_backoff_seconds",
+        "max_backoff_seconds",
+        "request_timeout_seconds",
+        "lock_timeout_seconds",
+    ):
+        value = values["notifications"][field_name]
+        if not _is_number(value) or float(value) <= 0:
+            errors.append(
+                f"notifications.{field_name} must be a number > 0."
+            )
+    backoff_mult = values["notifications"]["backoff_multiplier"]
+    if not _is_number(backoff_mult) or float(backoff_mult) < 1.0:
+        errors.append(
+            "notifications.backoff_multiplier must be a number >= 1.0."
+        )
+    if (
+        _is_number(values["notifications"]["initial_backoff_seconds"])
+        and _is_number(values["notifications"]["max_backoff_seconds"])
+        and float(values["notifications"]["initial_backoff_seconds"])
+        > float(values["notifications"]["max_backoff_seconds"])
+    ):
+        errors.append(
+            "notifications.initial_backoff_seconds cannot exceed "
+            "max_backoff_seconds."
+        )
+    if (
+        _is_number(values["notifications"]["worker_poll_interval_seconds"])
+        and float(values["notifications"]["worker_poll_interval_seconds"])
+        > 3600
+    ):
+        errors.append(
+            "notifications.worker_poll_interval_seconds must be <= 3600."
+        )
+    if (
+        _is_number(values["notifications"]["request_timeout_seconds"])
+        and float(values["notifications"]["request_timeout_seconds"]) > 120
+    ):
+        errors.append(
+            "notifications.request_timeout_seconds must be <= 120."
+        )
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -1313,6 +1570,43 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             timezone_default=str(
                 values["alerts"]["timezone_default"]
             ).strip(),
+        ),
+        notifications=NotificationsConfig(
+            enabled=bool(values["notifications"]["enabled"]),
+            worker_poll_interval_seconds=float(
+                values["notifications"]["worker_poll_interval_seconds"]
+            ),
+            max_attempts=int(values["notifications"]["max_attempts"]),
+            initial_backoff_seconds=float(
+                values["notifications"]["initial_backoff_seconds"]
+            ),
+            max_backoff_seconds=float(
+                values["notifications"]["max_backoff_seconds"]
+            ),
+            backoff_multiplier=float(
+                values["notifications"]["backoff_multiplier"]
+            ),
+            request_timeout_seconds=float(
+                values["notifications"]["request_timeout_seconds"]
+            ),
+            max_concurrent_deliveries=int(
+                values["notifications"]["max_concurrent_deliveries"]
+            ),
+            batch_size=int(values["notifications"]["batch_size"]),
+            lock_timeout_seconds=float(
+                values["notifications"]["lock_timeout_seconds"]
+            ),
+            max_request_bytes=int(
+                values["notifications"]["max_request_bytes"]
+            ),
+            max_response_bytes=int(
+                values["notifications"]["max_response_bytes"]
+            ),
+            allow_private_targets=bool(
+                values["notifications"]["allow_private_targets"]
+            ),
+            retention_days=int(values["notifications"]["retention_days"]),
+            worker_id=str(values["notifications"]["worker_id"]).strip(),
         ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),

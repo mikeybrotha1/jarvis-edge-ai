@@ -83,7 +83,16 @@ alerts:
 
 Env: `JARVIS_ALERTS_*`.
 
+## Outbound notifications (v0.9.0)
+
+When notification targets are configured, alert create/resolve inserts durable
+`notification_deliveries` rows in the **same database transaction** as the
+alert state change (transactional outbox). Outbox DB failures roll back the
+alert. Network delivery runs only after commit in a separate worker; webhook
+failures never modify alert state. See
+[outbound-notifications.md](outbound-notifications.md).
+
 ## Non-goals
 
-No NL rules, scripts, expressions, agents, embeddings, outbound integrations,
-or system-only alerts without `entity_id`.
+No NL rules, scripts, expressions, agents, embeddings, or system-only alerts
+without `entity_id`. Outbound webhooks are provided by v0.9.0 (not email/SMS).

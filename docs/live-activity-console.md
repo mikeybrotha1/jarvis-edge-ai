@@ -110,10 +110,23 @@ Modern evergreen browsers with ES modules + `fetch` + `WebSocket`
 9. Select an event/entity and confirm detail panel.
 10. Confirm API process logs never open camera/Hailo.
 
+## Notifications panel (v0.9.0)
+
+The console includes:
+
+- Notification target list + create/edit/disable form
+- Signing-secret set/replace control (secret never displayed after save)
+- Rule–target association controls
+- Per-alert delivery status and history
+- Retry for failed/exhausted deliveries
+- Status badges: pending, processing, delivered, failed, exhausted
+
+See [outbound-notifications.md](outbound-notifications.md).
+
 ## Explicit non-goals
 
 - SPA frameworks / Node build toolchain
-- New write APIs or auth
+- New write APIs or auth beyond existing REST
 - AI summaries / agents
 - Perfect at-least-once live delivery (use Timeline REST for truth)
 - Serving the console from a separate origin/server
