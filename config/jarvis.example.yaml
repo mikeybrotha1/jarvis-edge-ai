@@ -118,4 +118,35 @@ notifications:
   allow_private_targets: false
   retention_days: 30
   worker_id: jarvis-notification-worker
+
+# Operational observability & data lifecycle (v0.10.0)
+# Phase 3: typed retention policy only — cleanup is disabled and dry_run=true.
+# No deletion worker, manual run API, or destructive cleanup is active yet.
+ops:
+  retention:
+    enabled: false
+    dry_run: true
+    interval_seconds: 86400
+    batch_size: 250
+    max_batches_per_run: 4
+    # Phase 5: required for POST /api/v1/ops/retention/run (still needs enabled + dry_run=false)
+    allow_manual_destructive_run: false
+    observations:
+      enabled: false
+      keep_days: 30
+    entities:
+      enabled: false
+      keep_closed_days: 90
+    zone_sessions:
+      enabled: false
+      keep_closed_days: 90
+    alerts:
+      enabled: false
+      keep_resolved_days: 90
+    evaluator_state:
+      enabled: false
+      keep_inactive_days: 30
+    notification_deliveries:
+      enabled: false
+      keep_terminal_days: 90
   timezone_default: UTC

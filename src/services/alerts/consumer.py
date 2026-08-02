@@ -60,6 +60,10 @@ class AlertCommittedEventConsumer:
         self._ready = asyncio.Event()
         self._degraded = False
         self._dropped = 0
+        self._processed = 0
+        self._errors = 0
+        self._last_success_at: datetime | None = None
+        self._last_error_at: datetime | None = None
 
     @property
     def is_ready(self) -> bool:
@@ -68,6 +72,40 @@ class AlertCommittedEventConsumer:
     @property
     def is_degraded(self) -> bool:
         return self._degraded
+
+    @property
+    def queue_depth(self) -> int:
+        return self._queue.qsize()
+
+    @property
+    def dropped_count(self) -> int:
+        return self._dropped
+
+    def stats(self) -> dict[str, Any]:
+        checkpoint_event_id = None
+        checkpoint_occurred_at = None
+        try:
+            cp = self._checkpoints.get(self.consumer_name)
+            if cp is not None:
+                checkpoint_event_id = cp.last_event_id
+                checkpoint_occurred_at = cp.last_occurred_at
+        except Exception:  # noqa: BLE001 - ops path must not raise
+            pass
+        return {
+            "enabled": self.enabled,
+            "ready": self.is_ready,
+            "degraded": self.is_degraded,
+            "consumer_name": self.consumer_name,
+            "queue_depth": self.queue_depth,
+            "queue_size": self.queue_size,
+            "dropped": self._dropped,
+            "processed": self._processed,
+            "errors": self._errors,
+            "last_success_at": self._last_success_at,
+            "last_error_at": self._last_error_at,
+            "checkpoint_event_id": checkpoint_event_id,
+            "checkpoint_occurred_at": checkpoint_occurred_at,
+        }
 
     async def start(self) -> None:
         if not self.enabled:
@@ -147,6 +185,8 @@ class AlertCommittedEventConsumer:
                 await asyncio.to_thread(self._process_and_checkpoint, item)
             except Exception:
                 self._degraded = True
+                self._errors += 1
+                self._last_error_at = datetime.now(timezone.utc)
                 self._logger.exception(
                     "Alert evaluation failed for event_id=%s", item.id
                 )
@@ -200,3 +240,5 @@ class AlertCommittedEventConsumer:
             last_occurred_at=event.occurred_at,
             last_event_id=event.id,
         )
+        self._last_success_at = datetime.now(timezone.utc)
+        self._processed += 1

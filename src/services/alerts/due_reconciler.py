@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime, timezone
+from typing import Any
 
 from services.alerts.evaluation_service import AlertEvaluationService
 
@@ -25,6 +27,28 @@ class AlertDueReconciler:
         self._logger = logger or logging.getLogger(__name__)
         self._task: asyncio.Task[None] | None = None
         self._stop = asyncio.Event()
+        self._error_count = 0
+        self._iterations = 0
+        self._last_success_at: datetime | None = None
+        self._last_error_at: datetime | None = None
+        self._last_triggered_count = 0
+
+    @property
+    def is_running(self) -> bool:
+        return self._task is not None and not self._task.done()
+
+    def stats(self) -> dict[str, Any]:
+        return {
+            "enabled": self.enabled,
+            "running": self.is_running,
+            "error_count": self._error_count,
+            "iterations": self._iterations,
+            "last_success_at": self._last_success_at,
+            "last_error_at": self._last_error_at,
+            "last_triggered_count": self._last_triggered_count,
+            "interval_seconds": self.interval_seconds,
+            "batch_size": self.batch_size,
+        }
 
     async def start(self) -> None:
         if not self.enabled:
@@ -50,10 +74,15 @@ class AlertDueReconciler:
     async def _run(self) -> None:
         while not self._stop.is_set():
             try:
-                await asyncio.to_thread(
+                triggered = await asyncio.to_thread(
                     self._eval.process_due_states, batch_size=self.batch_size
                 )
+                self._iterations += 1
+                self._last_triggered_count = len(triggered or [])
+                self._last_success_at = datetime.now(timezone.utc)
             except Exception:
+                self._error_count += 1
+                self._last_error_at = datetime.now(timezone.utc)
                 self._logger.exception("Alert due reconciler iteration failed")
             try:
                 await asyncio.wait_for(

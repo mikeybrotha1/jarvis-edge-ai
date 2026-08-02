@@ -12,6 +12,11 @@ public APIs:
 | Interface | Role in console |
 |-----------|-----------------|
 | `GET /health` | API reachability |
+| `GET /ready` | Readiness (ops panel) |
+| `GET /api/v1/ops/status` | Component status + bounded metrics |
+| `GET /api/v1/ops/retention` | Retention policy + worker state |
+| `POST /api/v1/ops/retention/dry-run` | Manual non-destructive cycle |
+| `POST /api/v1/ops/retention/run` | Manual destructive cycle (server-guarded) |
 | `GET /api/v1/timeline` | Initial history + Load older + reconnect recovery |
 | `GET /api/v1/entities/active` | Active entities panel |
 | `GET /api/v1/entities/recent` | Recent entities panel |
@@ -98,7 +103,7 @@ Modern evergreen browsers with ES modules + `fetch` + `WebSocket`
 
 ## Manual test procedure (Chromium)
 
-1. Start API with `JARVIS_ACTIVITY_STREAM_ENABLED=true`.
+1. Start API with `JARVIS_ACTIVITY_STREAM_ENABLED=true` (optional for ops-only).
 2. Open `http://127.0.0.1:8080/console`.
 3. Confirm status bar and initial history (or empty state).
 4. Confirm WebSocket **connected** when stream is ready.
@@ -109,6 +114,12 @@ Modern evergreen browsers with ES modules + `fetch` + `WebSocket`
 8. Use **Load older** when `next_cursor` exists.
 9. Select an event/entity and confirm detail panel.
 10. Confirm API process logs never open camera/Hailo.
+11. Open **Operations**: readiness/overall badges, component rows, retention
+    policy + worker state.
+12. With retention enabled + dry-run: **Run dry-run** succeeds; cleanup stays
+    disabled under safe defaults; cooldown applies after triggers.
+13. Force ops endpoint failure (stop API briefly or block route): ops shows
+    stale hint; timeline/WebSocket remain usable when API returns.
 
 ## Notifications panel (v0.9.0)
 
@@ -122,6 +133,38 @@ The console includes:
 - Status badges: pending, processing, delivered, failed, exhausted
 
 See [outbound-notifications.md](outbound-notifications.md).
+
+## Operations panel (v0.10.0)
+
+Collapsible **Operations** section in the left sidebar:
+
+| Area | Content |
+|------|---------|
+| Overall / ready | Text badges: healthy, degraded, unavailable, disabled, ready/not_ready |
+| Components | Database, timeline, activity listener, alert consumer, due reconciler, notification worker, retention worker |
+| Metrics | Allow-listed gauges only (uptime, queue depth, delivery totals, latencies, retention cycle state) |
+| Retention policy | Global enabled, dry-run, manual destructive flag, batch bounds, per-domain periods |
+| Last run | Examined / deleted / skipped + per-domain lines |
+| Controls | **Run dry-run** (recommended) · **Run cleanup** (guarded) |
+
+### Polling
+
+- Every **8s**: `/ready` + `/api/v1/ops/status` + `/api/v1/ops/retention` when the ops section is open.
+- Ops poll failures set a “stale” hint and **do not** clear prior rows or break timeline/WebSocket/alerts UI.
+
+### Manual retention controls
+
+- Dry-run uses server policy only (no user cutoffs/SQL/batch overrides).
+- Cleanup is **disabled** under safe defaults (`enabled=false`, `dry_run=true`, `allow_manual_destructive_run=false`).
+- Cleanup requires server `destructive_permitted` plus idle cycle and elapsed cooldown; browser `confirm()` states that eligible historical data will be permanently deleted.
+- 403/409/422/429/503 messages are sanitized via existing helpers.
+- Buttons disable while a request is in flight.
+
+### Local-network security assumption
+
+The console and ops APIs assume a **trusted local / edge network** (same as the rest of the zero-auth API). Do not expose `/console` or retention controls to untrusted networks without additional access control.
+
+See [data-retention.md](data-retention.md).
 
 ## Explicit non-goals
 
@@ -143,6 +186,7 @@ console/
   js/recovery.js
   js/ui.js
   js/main.js
+  js/ops.js
 ```
 
 Mounted by FastAPI at `/console` (HTML routes + static assets).

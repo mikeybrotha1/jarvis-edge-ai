@@ -19,18 +19,26 @@ import yaml
 from config.models import (
     ActivityStreamConfig,
     AlertsConfig,
+    AlertsRetentionPolicy,
     ApiConfig,
     AppConfig,
     CameraConfig,
     DatabaseConfig,
     DetectorConfig,
+    EntitiesRetentionPolicy,
     EntityMemoryConfig,
+    EvaluatorStateRetentionPolicy,
     LoggingConfig,
     MemoryConfig,
+    NotificationDeliveriesRetentionPolicy,
     NotificationsConfig,
+    ObservationsRetentionPolicy,
+    OpsConfig,
+    RetentionConfig,
     RuntimeConfig,
     SpatialConfig,
     TimelineConfig,
+    ZoneSessionsRetentionPolicy,
 )
 
 
@@ -136,9 +144,45 @@ _SECTION_FIELDS: dict[str, frozenset[str]] = {
             "worker_id",
         }
     ),
+    # Nested: ops.retention.* validated in _validate_ops / _merge_ops_yaml
+    "ops": frozenset({"retention"}),
     "logging": frozenset({"level", "log_file"}),
     "runtime": frozenset({"platform", "application"}),
 }
+
+_RETENTION_ROOT_FIELDS = frozenset(
+    {
+        "enabled",
+        "dry_run",
+        "interval_seconds",
+        "batch_size",
+        "max_batches_per_run",
+        "allow_manual_destructive_run",
+        "observations",
+        "entities",
+        "zone_sessions",
+        "alerts",
+        "evaluator_state",
+        "notification_deliveries",
+    }
+)
+_RETENTION_DOMAIN_FIELDS: dict[str, frozenset[str]] = {
+    "observations": frozenset({"enabled", "keep_days"}),
+    "entities": frozenset({"enabled", "keep_closed_days"}),
+    "zone_sessions": frozenset({"enabled", "keep_closed_days"}),
+    "alerts": frozenset({"enabled", "keep_resolved_days"}),
+    "evaluator_state": frozenset({"enabled", "keep_inactive_days"}),
+    "notification_deliveries": frozenset({"enabled", "keep_terminal_days"}),
+}
+
+_RETENTION_INTERVAL_MIN = 60
+_RETENTION_INTERVAL_MAX = 604_800
+_RETENTION_BATCH_MIN = 1
+_RETENTION_BATCH_MAX = 1000
+_RETENTION_MAX_BATCHES_MIN = 1
+_RETENTION_MAX_BATCHES_MAX = 100
+_RETENTION_KEEP_DAYS_MIN = 1
+_RETENTION_KEEP_DAYS_MAX = 3650
 
 _VALID_IDENTITY_STRATEGIES = frozenset({"tracker_id"})
 _VALID_POSITION_STRATEGIES = frozenset({"bottom_center", "center"})
@@ -339,6 +383,9 @@ def _default_values() -> dict[str, dict[str, Any]]:
             "retention_days": defaults.notifications.retention_days,
             "worker_id": defaults.notifications.worker_id,
         },
+        "ops": {
+            "retention": _default_retention_values(defaults.ops.retention),
+        },
         "logging": {
             "level": defaults.logging.level,
             "log_file": defaults.logging.log_file,
@@ -346,6 +393,41 @@ def _default_values() -> dict[str, dict[str, Any]]:
         "runtime": {
             "platform": defaults.runtime.platform,
             "application": defaults.runtime.application,
+        },
+    }
+
+
+def _default_retention_values(ret: RetentionConfig) -> dict[str, Any]:
+    return {
+        "enabled": ret.enabled,
+        "dry_run": ret.dry_run,
+        "interval_seconds": ret.interval_seconds,
+        "batch_size": ret.batch_size,
+        "max_batches_per_run": ret.max_batches_per_run,
+        "allow_manual_destructive_run": ret.allow_manual_destructive_run,
+        "observations": {
+            "enabled": ret.observations.enabled,
+            "keep_days": ret.observations.keep_days,
+        },
+        "entities": {
+            "enabled": ret.entities.enabled,
+            "keep_closed_days": ret.entities.keep_closed_days,
+        },
+        "zone_sessions": {
+            "enabled": ret.zone_sessions.enabled,
+            "keep_closed_days": ret.zone_sessions.keep_closed_days,
+        },
+        "alerts": {
+            "enabled": ret.alerts.enabled,
+            "keep_resolved_days": ret.alerts.keep_resolved_days,
+        },
+        "evaluator_state": {
+            "enabled": ret.evaluator_state.enabled,
+            "keep_inactive_days": ret.evaluator_state.keep_inactive_days,
+        },
+        "notification_deliveries": {
+            "enabled": ret.notification_deliveries.enabled,
+            "keep_terminal_days": ret.notification_deliveries.keep_terminal_days,
         },
     }
 
@@ -427,6 +509,10 @@ def _merge_yaml(
                 f"Configuration section {section!r} must be a mapping."
             )
 
+        if section == "ops":
+            _merge_ops_yaml(values["ops"], section_data)
+            continue
+
         allowed = _SECTION_FIELDS[section]
         for key, value in section_data.items():
             if key not in allowed:
@@ -435,6 +521,65 @@ def _merge_yaml(
                     f"Allowed keys: {', '.join(sorted(allowed))}."
                 )
             values[section][key] = value
+
+
+def _merge_ops_yaml(
+    ops_values: dict[str, Any],
+    section_data: dict[str, Any],
+) -> None:
+    allowed = _SECTION_FIELDS["ops"]
+    for key, value in section_data.items():
+        if key not in allowed:
+            raise ConfigurationError(
+                f"Unknown configuration key: ops.{key}. "
+                f"Allowed keys: {', '.join(sorted(allowed))}."
+            )
+        if key == "retention":
+            if value is None:
+                continue
+            if not isinstance(value, dict):
+                raise ConfigurationError(
+                    "ops.retention must be a mapping."
+                )
+            ops_values["retention"] = _deep_merge_retention(
+                ops_values["retention"], value
+            )
+        else:
+            ops_values[key] = value
+
+
+def _deep_merge_retention(
+    base: dict[str, Any],
+    override: dict[str, Any],
+) -> dict[str, Any]:
+    result = dict(base)
+    for key, value in override.items():
+        if key not in _RETENTION_ROOT_FIELDS:
+            raise ConfigurationError(
+                f"Unknown configuration key: ops.retention.{key}. "
+                f"Allowed keys: {', '.join(sorted(_RETENTION_ROOT_FIELDS))}."
+            )
+        if key in _RETENTION_DOMAIN_FIELDS:
+            if value is None:
+                continue
+            if not isinstance(value, dict):
+                raise ConfigurationError(
+                    f"ops.retention.{key} must be a mapping."
+                )
+            domain = dict(result[key])
+            allowed = _RETENTION_DOMAIN_FIELDS[key]
+            for dkey, dval in value.items():
+                if dkey not in allowed:
+                    raise ConfigurationError(
+                        f"Unknown configuration key: "
+                        f"ops.retention.{key}.{dkey}. "
+                        f"Allowed keys: {', '.join(sorted(allowed))}."
+                    )
+                domain[dkey] = dval
+            result[key] = domain
+        else:
+            result[key] = value
+    return result
 
 
 def _apply_env_overrides(
@@ -884,6 +1029,7 @@ def _apply_env_overrides(
         environ,
         "JARVIS_NOTIFICATIONS_WORKER_ID",
     )
+    _apply_retention_env_overrides(values, environ)
     _set_env_string(
         values,
         "logging",
@@ -1397,6 +1543,8 @@ def _validate(values: dict[str, dict[str, Any]]) -> None:
             "notifications.request_timeout_seconds must be <= 120."
         )
 
+    errors.extend(_validate_retention(values["ops"]["retention"]))
+
     level = values["logging"]["level"]
     if not isinstance(level, str) or not level.strip():
         errors.append("logging.level must be a non-empty string.")
@@ -1608,6 +1756,9 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
             retention_days=int(values["notifications"]["retention_days"]),
             worker_id=str(values["notifications"]["worker_id"]).strip(),
         ),
+        ops=OpsConfig(
+            retention=_build_retention_config(values["ops"]["retention"]),
+        ),
         logging=LoggingConfig(
             level=str(values["logging"]["level"]).strip().upper(),
             log_file=str(values["logging"]["log_file"]).strip(),
@@ -1615,5 +1766,310 @@ def _build_config(values: dict[str, dict[str, Any]]) -> AppConfig:
         runtime=RuntimeConfig(
             platform=str(values["runtime"]["platform"]).strip(),
             application=str(values["runtime"]["application"]).strip(),
+        ),
+    )
+
+
+def _apply_retention_env_overrides(
+    values: dict[str, dict[str, Any]],
+    environ: Mapping[str, str],
+) -> None:
+    ret = values["ops"]["retention"]
+    _set_nested_bool(
+        ret, "enabled", environ, "JARVIS_OPS_RETENTION_ENABLED"
+    )
+    _set_nested_bool(
+        ret, "dry_run", environ, "JARVIS_OPS_RETENTION_DRY_RUN"
+    )
+    _set_nested_int(
+        ret,
+        "interval_seconds",
+        environ,
+        "JARVIS_OPS_RETENTION_INTERVAL_SECONDS",
+    )
+    _set_nested_int(
+        ret, "batch_size", environ, "JARVIS_OPS_RETENTION_BATCH_SIZE"
+    )
+    _set_nested_int(
+        ret,
+        "max_batches_per_run",
+        environ,
+        "JARVIS_OPS_RETENTION_MAX_BATCHES_PER_RUN",
+    )
+    _set_nested_bool(
+        ret,
+        "allow_manual_destructive_run",
+        environ,
+        "JARVIS_OPS_RETENTION_ALLOW_MANUAL_DESTRUCTIVE_RUN",
+    )
+    _set_nested_bool(
+        ret["observations"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_OBSERVATIONS_ENABLED",
+    )
+    _set_nested_int(
+        ret["observations"],
+        "keep_days",
+        environ,
+        "JARVIS_OPS_RETENTION_OBSERVATIONS_KEEP_DAYS",
+    )
+    _set_nested_bool(
+        ret["entities"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_ENTITIES_ENABLED",
+    )
+    _set_nested_int(
+        ret["entities"],
+        "keep_closed_days",
+        environ,
+        "JARVIS_OPS_RETENTION_ENTITIES_KEEP_CLOSED_DAYS",
+    )
+    _set_nested_bool(
+        ret["zone_sessions"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_ZONE_SESSIONS_ENABLED",
+    )
+    _set_nested_int(
+        ret["zone_sessions"],
+        "keep_closed_days",
+        environ,
+        "JARVIS_OPS_RETENTION_ZONE_SESSIONS_KEEP_CLOSED_DAYS",
+    )
+    _set_nested_bool(
+        ret["alerts"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_ALERTS_ENABLED",
+    )
+    _set_nested_int(
+        ret["alerts"],
+        "keep_resolved_days",
+        environ,
+        "JARVIS_OPS_RETENTION_ALERTS_KEEP_RESOLVED_DAYS",
+    )
+    _set_nested_bool(
+        ret["evaluator_state"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_EVALUATOR_STATE_ENABLED",
+    )
+    _set_nested_int(
+        ret["evaluator_state"],
+        "keep_inactive_days",
+        environ,
+        "JARVIS_OPS_RETENTION_EVALUATOR_STATE_KEEP_INACTIVE_DAYS",
+    )
+    _set_nested_bool(
+        ret["notification_deliveries"],
+        "enabled",
+        environ,
+        "JARVIS_OPS_RETENTION_NOTIFICATION_DELIVERIES_ENABLED",
+    )
+    _set_nested_int(
+        ret["notification_deliveries"],
+        "keep_terminal_days",
+        environ,
+        "JARVIS_OPS_RETENTION_NOTIFICATION_DELIVERIES_KEEP_TERMINAL_DAYS",
+    )
+
+
+def _set_nested_bool(
+    target: dict[str, Any],
+    field: str,
+    environ: Mapping[str, str],
+    env_name: str,
+) -> None:
+    if env_name not in environ:
+        return
+    raw = environ[env_name].strip().lower()
+    if raw in {"1", "true", "yes", "on"}:
+        target[field] = True
+        return
+    if raw in {"0", "false", "no", "off"}:
+        target[field] = False
+        return
+    raise ConfigurationError(
+        f"Invalid boolean for {env_name}: {environ[env_name]!r}. "
+        "Use true/false, yes/no, on/off, or 1/0."
+    )
+
+
+def _set_nested_int(
+    target: dict[str, Any],
+    field: str,
+    environ: Mapping[str, str],
+    env_name: str,
+) -> None:
+    if env_name not in environ:
+        return
+    raw = environ[env_name].strip()
+    # Reject floats and non-digit garbage without silent truncation.
+    if not raw or not raw.lstrip("+-").isdigit():
+        raise ConfigurationError(
+            f"Invalid integer for {env_name}: {raw!r}"
+        )
+    try:
+        value = int(raw)
+    except ValueError as error:
+        raise ConfigurationError(
+            f"Invalid integer for {env_name}: {raw!r}"
+        ) from error
+    target[field] = value
+
+
+def _validate_retention(ret: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(ret, dict):
+        return ["ops.retention must be a mapping."]
+
+    for field_name in (
+        "enabled",
+        "dry_run",
+        "allow_manual_destructive_run",
+    ):
+        value = ret.get(field_name)
+        if not isinstance(value, bool):
+            errors.append(
+                f"ops.retention.{field_name} must be a boolean."
+            )
+
+    interval = ret.get("interval_seconds")
+    if not _is_int(interval):
+        errors.append(
+            "ops.retention.interval_seconds must be an integer."
+        )
+    elif not (
+        _RETENTION_INTERVAL_MIN <= int(interval) <= _RETENTION_INTERVAL_MAX
+    ):
+        errors.append(
+            "ops.retention.interval_seconds must be between "
+            f"{_RETENTION_INTERVAL_MIN} and {_RETENTION_INTERVAL_MAX}."
+        )
+
+    batch = ret.get("batch_size")
+    if not _is_int(batch):
+        errors.append("ops.retention.batch_size must be an integer.")
+    elif not (_RETENTION_BATCH_MIN <= int(batch) <= _RETENTION_BATCH_MAX):
+        errors.append(
+            "ops.retention.batch_size must be between "
+            f"{_RETENTION_BATCH_MIN} and {_RETENTION_BATCH_MAX}."
+        )
+
+    max_batches = ret.get("max_batches_per_run")
+    if not _is_int(max_batches):
+        errors.append(
+            "ops.retention.max_batches_per_run must be an integer."
+        )
+    elif not (
+        _RETENTION_MAX_BATCHES_MIN
+        <= int(max_batches)
+        <= _RETENTION_MAX_BATCHES_MAX
+    ):
+        errors.append(
+            "ops.retention.max_batches_per_run must be between "
+            f"{_RETENTION_MAX_BATCHES_MIN} and {_RETENTION_MAX_BATCHES_MAX}."
+        )
+
+    domain_keep_fields = {
+        "observations": "keep_days",
+        "entities": "keep_closed_days",
+        "zone_sessions": "keep_closed_days",
+        "alerts": "keep_resolved_days",
+        "evaluator_state": "keep_inactive_days",
+        "notification_deliveries": "keep_terminal_days",
+    }
+    for domain, keep_field in domain_keep_fields.items():
+        block = ret.get(domain)
+        if not isinstance(block, dict):
+            errors.append(f"ops.retention.{domain} must be a mapping.")
+            continue
+        enabled = block.get("enabled")
+        if not isinstance(enabled, bool):
+            errors.append(
+                f"ops.retention.{domain}.enabled must be a boolean."
+            )
+        keep = block.get(keep_field)
+        if not _is_int(keep):
+            errors.append(
+                f"ops.retention.{domain}.{keep_field} must be an integer."
+            )
+        elif not (
+            _RETENTION_KEEP_DAYS_MIN
+            <= int(keep)
+            <= _RETENTION_KEEP_DAYS_MAX
+        ):
+            errors.append(
+                f"ops.retention.{domain}.{keep_field} must be between "
+                f"{_RETENTION_KEEP_DAYS_MIN} and {_RETENTION_KEEP_DAYS_MAX}."
+            )
+
+    # Unsafe combination: live destructive mode without dry_run while no
+    # domain is selected is pointless; live mode with domains requires
+    # dry_run=true unless operator explicitly enables both global and domain
+    # flags (allowed). Reject: enabled=true, dry_run=false, and zero domains
+    # enabled (no-op destructive) — or more strictly: when dry_run=false
+    # require enabled=true AND at least one domain.
+    if (
+        isinstance(ret.get("enabled"), bool)
+        and isinstance(ret.get("dry_run"), bool)
+        and ret["enabled"] is True
+        and ret["dry_run"] is False
+    ):
+        any_domain = False
+        for domain in domain_keep_fields:
+            block = ret.get(domain)
+            if isinstance(block, dict) and block.get("enabled") is True:
+                any_domain = True
+                break
+        if not any_domain:
+            errors.append(
+                "ops.retention: dry_run=false with enabled=true requires "
+                "at least one domain policy enabled "
+                "(refuse no-op destructive configuration)."
+            )
+
+    return errors
+
+
+def _build_retention_config(ret: dict[str, Any]) -> RetentionConfig:
+    return RetentionConfig(
+        enabled=bool(ret["enabled"]),
+        dry_run=bool(ret["dry_run"]),
+        interval_seconds=int(ret["interval_seconds"]),
+        batch_size=int(ret["batch_size"]),
+        max_batches_per_run=int(ret["max_batches_per_run"]),
+        allow_manual_destructive_run=bool(
+            ret.get("allow_manual_destructive_run", False)
+        ),
+        observations=ObservationsRetentionPolicy(
+            enabled=bool(ret["observations"]["enabled"]),
+            keep_days=int(ret["observations"]["keep_days"]),
+        ),
+        entities=EntitiesRetentionPolicy(
+            enabled=bool(ret["entities"]["enabled"]),
+            keep_closed_days=int(ret["entities"]["keep_closed_days"]),
+        ),
+        zone_sessions=ZoneSessionsRetentionPolicy(
+            enabled=bool(ret["zone_sessions"]["enabled"]),
+            keep_closed_days=int(ret["zone_sessions"]["keep_closed_days"]),
+        ),
+        alerts=AlertsRetentionPolicy(
+            enabled=bool(ret["alerts"]["enabled"]),
+            keep_resolved_days=int(ret["alerts"]["keep_resolved_days"]),
+        ),
+        evaluator_state=EvaluatorStateRetentionPolicy(
+            enabled=bool(ret["evaluator_state"]["enabled"]),
+            keep_inactive_days=int(
+                ret["evaluator_state"]["keep_inactive_days"]
+            ),
+        ),
+        notification_deliveries=NotificationDeliveriesRetentionPolicy(
+            enabled=bool(ret["notification_deliveries"]["enabled"]),
+            keep_terminal_days=int(
+                ret["notification_deliveries"]["keep_terminal_days"]
+            ),
         ),
     )
