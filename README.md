@@ -1,6 +1,6 @@
 # Jarvis Edge AI
 
-![Status](https://img.shields.io/badge/status-v0.10.0-brightgreen)
+![Status](https://img.shields.io/badge/status-v1.0.0-brightgreen)
 ![Platform](https://img.shields.io/badge/platform-Raspberry%20Pi%205-red)
 ![Accelerator](https://img.shields.io/badge/AI-Hailo--10H-blue)
 
@@ -8,7 +8,7 @@ Edge-AI platform for Raspberry Pi 5 with optional Hailo acceleration, durable
 entity memory on PostgreSQL, REST/timeline APIs, spatial zones, durable alerts,
 outbound webhooks, and operational data lifecycle controls.
 
-## What works today (v0.10.0)
+## What works today (v1.0.0)
 
 | Area | Capability |
 |------|------------|
