@@ -1,0 +1,686 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <title>Jarvis Edge AI — Raspberry Pi 5 edge platform by Michael Inzinna</title>
+  <meta
+    name="description"
+    content="Jarvis Edge AI is a Raspberry Pi 5 edge platform with Hailo-10H vision, PostgreSQL entity memory, a timeline API, durable alerts, and a zero-build operations console."
+  />
+  <meta name="author" content="Michael Inzinna" />
+  <meta name="robots" content="index,follow" />
+  <link rel="canonical" href="https://mikeybrotha1.github.io/jarvis-edge-ai/" />
+  <meta property="og:type" content="website" />
+  <meta property="og:title" content="Jarvis Edge AI — Raspberry Pi 5 + Hailo-10H" />
+  <meta
+    property="og:description"
+    content="On-device vision, durable entity memory, and an operations console. The API process never loads the camera or Hailo."
+  />
+  <meta property="og:url" content="https://mikeybrotha1.github.io/jarvis-edge-ai/" />
+  <meta property="og:image" content="https://mikeybrotha1.github.io/jarvis-edge-ai/og-image.png" />
+  <meta property="og:image:width" content="1200" />
+  <meta property="og:image:height" content="630" />
+  <meta property="og:locale" content="en_US" />
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="Jarvis Edge AI — Raspberry Pi 5 + Hailo-10H" />
+  <meta
+    name="twitter:description"
+    content="On-device vision, durable entity memory, and an operations console. Built by Michael Inzinna."
+  />
+  <meta name="twitter:image" content="https://mikeybrotha1.github.io/jarvis-edge-ai/og-image.png" />
+  <meta name="theme-color" content="#070b10" />
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="icon" href="./favicon-32.png" type="image/png" sizes="32x32" />
+  <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+  <link rel="stylesheet" href="./css/styles.css" />
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareSourceCode",
+    "name": "Jarvis Edge AI",
+    "description": "Edge-AI platform for Raspberry Pi 5 with optional Hailo-10H acceleration, durable entity memory on PostgreSQL, REST and timeline APIs, spatial zones, durable alerts, outbound webhooks, and operational data lifecycle controls.",
+    "version": "1.0.0",
+    "programmingLanguage": "Python",
+    "runtimePlatform": "Raspberry Pi 5",
+    "codeRepository": "https://github.com/mikeybrotha1/jarvis-edge-ai",
+    "url": "https://mikeybrotha1.github.io/jarvis-edge-ai/",
+    "author": {
+      "@type": "Person",
+      "name": "Michael Inzinna",
+      "email": "m.inzinna.24@gmail.com",
+      "url": "https://www.linkedin.com/in/michael-inzinna-098431108",
+      "sameAs": [
+        "https://github.com/mikeybrotha1",
+        "https://www.linkedin.com/in/michael-inzinna-098431108"
+      ]
+    }
+  }
+  </script>
+</head>
+<body>
+  <div class="backdrop" aria-hidden="true"></div>
+  <a class="skip-link" href="#content">Skip to content</a>
+
+  <header class="site-header">
+    <a class="brand" href="#top">
+      <img src="./favicon.svg" width="28" height="28" alt="" />
+      Jarvis Edge AI
+    </a>
+    <button class="nav-toggle" type="button" aria-expanded="false" aria-controls="site-nav">
+      Menu
+    </button>
+    <nav id="site-nav" class="site-nav" aria-label="On this page">
+      <ul>
+        <li><a href="#works">What works</a></li>
+        <li><a href="#architecture">Architecture</a></li>
+        <li><a href="#engineering">Engineering</a></li>
+        <li><a href="#console">Console</a></li>
+        <li><a href="#roadmap">Roadmap</a></li>
+        <li><a href="#about">About</a></li>
+      </ul>
+    </nav>
+  </header>
+
+  <main id="content">
+    <section class="hero" id="top" aria-labelledby="hero-title">
+      <div class="wrap hero-grid">
+        <div>
+          <p class="kicker">Michael Inzinna · edge systems</p>
+          <h1 id="hero-title">Jarvis Edge AI</h1>
+          <p class="lede">Edge-AI platform for Raspberry Pi 5 with Hailo-10H acceleration.</p>
+          <p class="support">
+            A separate vision process detects objects on device. PostgreSQL is the
+            durable memory. A FastAPI process that never loads the camera serves a
+            timeline, live activity, zones, alerts, webhooks, and a zero-build console.
+          </p>
+          <ul class="badges" aria-label="Project badges">
+            <li class="badge"><strong>v1.0.0</strong> status</li>
+            <li class="badge">Raspberry Pi 5</li>
+            <li class="badge">Hailo-10H</li>
+            <li class="badge">PostgreSQL</li>
+          </ul>
+          <div class="actions">
+            <a class="button primary" href="https://github.com/mikeybrotha1/jarvis-edge-ai">View the repository</a>
+            <a class="button ghost" href="https://www.linkedin.com/in/michael-inzinna-098431108">LinkedIn</a>
+            <a class="button ghost" href="https://github.com/mikeybrotha1">GitHub</a>
+          </div>
+        </div>
+
+        <aside class="hero-card" aria-label="How a frame becomes an operation">
+          <ol>
+            <li>
+              <span class="step-index">01</span>
+              <div>
+                <h2>See</h2>
+                <p>Azure Kinect frames stay in the vision process. Hailo-10H runs YOLOv6n.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-index">02</span>
+              <div>
+                <h2>Remember</h2>
+                <p>Entities, observations, zones, and alerts commit to PostgreSQL.</p>
+              </div>
+            </li>
+            <li>
+              <span class="step-index">03</span>
+              <div>
+                <h2>Operate</h2>
+                <p>The API and Live Activity Console read that store. They do not open the camera.</p>
+              </div>
+            </li>
+          </ol>
+        </aside>
+      </div>
+
+      <div class="wrap">
+        <ul class="proof">
+          <li><strong>Separate vision process</strong> Camera, Hailo, OpenCV, and NumPy stay out of the API.</li>
+          <li><strong>Authoritative PostgreSQL</strong> Alembic migrations. LISTEN/NOTIFY is live delivery only.</li>
+          <li><strong>Safe retention defaults</strong> Global off, dry-run on, manual delete off.</li>
+          <li><strong>Trusted-network ops</strong> Health, readiness, and metrics. No built-in auth.</li>
+        </ul>
+      </div>
+    </section>
+
+    <section id="works" aria-labelledby="works-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">Shipped in this repository</p>
+          <h2 id="works-title">What works today</h2>
+          <p>
+            README status is v1.0.0. The capabilities below are the ones that
+            repository documents as working. Nothing on this page is a benchmark,
+            a customer count, or a feature that only appears on the roadmap.
+          </p>
+        </div>
+        <div class="cards">
+          <article>
+            <span class="tag">Vision</span>
+            <h3>Hailo, in its own process</h3>
+            <p>
+              On-device object detection with a Hailo-10H YOLOv6n detector and an
+              Azure Kinect colour camera opened through V4L2. Vision is optional
+              and separate from the API process.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Memory</span>
+            <h3>Entity memory on PostgreSQL</h3>
+            <p>
+              Durable entities, observations, and snapshots, with Alembic
+              migrations. PostgreSQL is the authoritative store.
+            </p>
+          </article>
+          <article>
+            <span class="tag">History</span>
+            <h3>Timeline API with cursors</h3>
+            <p>
+              Paginated historical activity and recovery-friendly cursors, so a
+              client can resume without inventing events.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Live</span>
+            <h3>Activity stream</h3>
+            <p>
+              Optional PostgreSQL LISTEN/NOTIFY plus a WebSocket feed. The
+              stream is ephemeral. Tables remain the source of truth. Channel
+              default: <span class="mono">jarvis_activity</span>.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Space</span>
+            <h3>Zones, dwell, occupancy</h3>
+            <p>
+              Camera zones in normalised coordinates, dwell sessions, and
+              occupancy. The API does not use Shapely or OpenCV for geometry.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Alerts</span>
+            <h3>Durable alerts</h3>
+            <p>
+              Rules, evaluator state, consumer checkpoints, and a due reconciler.
+              Alert state survives restarts because it is stored, not held only in memory.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Notify</span>
+            <h3>Webhook outbox</h3>
+            <p>
+              Transactional outbox, SSRF-checked delivery, attempt history, and
+              retries. HTTP runs after commit, outside the alert transaction.
+            </p>
+          </article>
+          <article>
+            <span class="tag">Ops</span>
+            <h3>Observability, retention, console</h3>
+            <p>
+              <span class="mono">/health</span>, <span class="mono">/ready</span>,
+              and <span class="mono">/api/v1/ops/status</span> with bounded metrics.
+              Retention is config-driven and safe by default. The Live Activity
+              Console is zero-build HTML, CSS, and vanilla JS.
+            </p>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="arch" id="architecture" aria-labelledby="arch-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">Process boundary</p>
+          <h2 id="arch-title">Camera, then Hailo, then the database, then the API</h2>
+          <p>
+            The API process never loads camera, Hailo, OpenCV, or NumPy. Vision
+            remains a separate edge process when it is used.
+          </p>
+        </div>
+
+        <div class="flow">
+          <div class="pipe">
+            <article class="node">
+              <h3>Camera</h3>
+              <p>Azure Kinect colour frames through V4L2. Opened only by the vision process.</p>
+            </article>
+            <div class="arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4v14M6 12l6 6 6-6" />
+              </svg>
+            </div>
+            <article class="node">
+              <h3>Hailo vision process</h3>
+              <p>YOLOv6n on Hailo-10H. Writes durable rows and <span class="mono">pg_notify</span> in the same transaction.</p>
+            </article>
+            <div class="arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4v14M6 12l6 6 6-6" />
+              </svg>
+            </div>
+            <article class="node">
+              <h3>PostgreSQL</h3>
+              <p>Authoritative store for entities, zone sessions, alerts, checkpoints, and the notification outbox. Alembic owns the schema.</p>
+            </article>
+            <div class="arrow" aria-hidden="true">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M12 4v14M6 12l6 6 6-6" />
+              </svg>
+            </div>
+            <article class="node api-node">
+              <h3>API process</h3>
+              <p>FastAPI. Timeline, entities, zones, alerts, webhooks, ops. One async LISTEN connection when the stream is enabled.</p>
+            </article>
+          </div>
+
+          <aside class="callout">
+            <h3>The API never imports the sensor stack</h3>
+            <p>
+              Documented constraint, checked in architecture notes and API startup:
+              no camera, no Hailo, no OpenCV, no NumPy. A console and a webhook
+              worker can run with only the API and PostgreSQL.
+            </p>
+          </aside>
+
+          <div class="outputs">
+            <article>
+              <h3>Live Activity Console</h3>
+              <p>Same-origin static UI. Timeline, entities, zones, alerts, notifications, and an Operations panel. No Node build, no live video.</p>
+            </article>
+            <article>
+              <h3>Durable alerts</h3>
+              <p>Rules and evaluator state, a consumer with checkpoints, and a due reconciler. Readiness uses recent errors, not a permanent historical stain.</p>
+            </article>
+            <article>
+              <h3>Webhooks</h3>
+              <p>Outbox rows commit with the alert. A worker delivers HTTP afterward, with SSRF checks and recorded attempts.</p>
+            </article>
+          </div>
+        </div>
+
+        <figure class="panel arch-svg">
+          <figcaption class="kicker" style="margin-bottom:0.6rem">Same path, as a diagram</figcaption>
+          <svg viewBox="0 0 920 250" role="img" aria-labelledby="svg-title svg-desc">
+            <title id="svg-title">Jarvis data path</title>
+            <desc id="svg-desc">
+              Camera feeds the Hailo vision process. That process writes PostgreSQL.
+              The API process reads PostgreSQL and never loads camera, Hailo, OpenCV, or NumPy.
+              The API serves the console, alerts, and webhooks.
+            </desc>
+            <rect x="8" y="28" width="250" height="194" rx="14" fill="#101820" stroke="#5eead4" stroke-opacity="0.35" />
+            <text x="22" y="52" fill="#5eead4" font-family="ui-monospace, monospace" font-size="12">VISION PROCESS</text>
+            <rect x="22" y="66" width="222" height="64" rx="10" fill="#141e28" stroke="#2a3d4d" />
+            <text x="36" y="92" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="15">Camera</text>
+            <text x="36" y="112" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">Azure Kinect · V4L2</text>
+            <rect x="22" y="142" width="222" height="64" rx="10" fill="#141e28" stroke="#2a3d4d" />
+            <text x="36" y="168" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="15">Hailo-10H</text>
+            <text x="36" y="188" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">YOLOv6n detection</text>
+            <path d="M258 160 H300" stroke="#5eead4" stroke-width="1.6" fill="none" />
+            <path d="M292 154 l10 6 -10 6" fill="#5eead4" />
+            <rect x="310" y="78" width="170" height="120" rx="12" fill="#141e28" stroke="#2a3d4d" />
+            <text x="324" y="112" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="15">PostgreSQL</text>
+            <text x="324" y="134" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">Authoritative store</text>
+            <text x="324" y="154" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">LISTEN / NOTIFY</text>
+            <text x="324" y="174" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">Alembic schema</text>
+            <path d="M480 138 H522" stroke="#5eead4" stroke-width="1.6" fill="none" />
+            <path d="M514 132 l10 6 -10 6" fill="#5eead4" />
+            <rect x="532" y="48" width="376" height="170" rx="14" fill="#101820" stroke="#5eead4" />
+            <text x="546" y="74" fill="#5eead4" font-family="ui-monospace, monospace" font-size="12">API PROCESS · NO SENSOR STACK</text>
+            <rect x="546" y="88" width="110" height="52" rx="8" fill="#141e28" stroke="#2a3d4d" />
+            <text x="558" y="118" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="13">Console</text>
+            <rect x="666" y="88" width="110" height="52" rx="8" fill="#141e28" stroke="#2a3d4d" />
+            <text x="678" y="118" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="13">Alerts</text>
+            <rect x="786" y="88" width="108" height="52" rx="8" fill="#141e28" stroke="#2a3d4d" />
+            <text x="798" y="118" fill="#e7eef6" font-family="Segoe UI, system-ui, sans-serif" font-size="13">Webhooks</text>
+            <text x="546" y="172" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">FastAPI · timeline · ops · outbox</text>
+            <text x="546" y="194" fill="#a9bacb" font-family="Segoe UI, system-ui, sans-serif" font-size="12">No camera, Hailo, OpenCV, or NumPy.</text>
+          </svg>
+        </figure>
+      </div>
+    </section>
+
+    <section id="engineering" aria-labelledby="eng-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">How it is built</p>
+          <h2 id="eng-title">Production habits, visible in the tree</h2>
+          <p>
+            Typed YAML configuration, explicit safety defaults, a transactional
+            outbox, and a pytest suite that covers the API without hardware.
+          </p>
+        </div>
+
+        <div class="split">
+          <article class="panel">
+            <h3>Safe by default</h3>
+            <p>
+              Upgrading does not start deleting data. Retention ships off, and a
+              destructive manual run stays blocked until several guards are set.
+              Ops payloads omit DSNs, credentials, Fernet keys, paths, raw SQL,
+              and exception stacks. There is no built-in authentication: ops and
+              retention assume a trusted local or edge network.
+            </p>
+            <pre class="defaults" aria-label="Documented retention defaults"><code>ops.retention.enabled: false
+ops.retention.dry_run: true
+ops.retention.allow_manual_destructive_run: false
+# every retention domain enabled: false</code></pre>
+          </article>
+
+          <article class="panel">
+            <h3>Transactional outbox</h3>
+            <p>
+              When an alert matches webhook targets, the alert state and the
+              <span class="mono">notification_deliveries</span> rows commit in the
+              same database transaction. Outbound HTTP is not part of that
+              transaction. After commit, a worker claims rows
+              (<span class="mono">FOR UPDATE SKIP LOCKED</span> on PostgreSQL),
+              delivers, and records each attempt.
+            </p>
+            <p>
+              Delivery is at-least-once. Receivers dedupe on
+              <span class="mono">X-Jarvis-Delivery-ID</span>. Statuses are pending,
+              processing, delivered, failed, and exhausted. Targets must be http
+              or https, with no embedded credentials. Loopback, link-local
+              (including cloud metadata), and private addresses are blocked by default.
+            </p>
+          </article>
+        </div>
+
+        <article class="panel" style="margin-top:0.85rem">
+          <h3>Test suite in this repository</h3>
+          <p>
+            Counted from <span class="mono">tests/</span>: 40 pytest modules define
+            314 functions named <span class="mono">test_*</span>. They cover entity
+            memory, the timeline, the activity stream, spatial zones, alerts,
+            notifications, retention, ops status, and the console. Two further
+            scripts exercise Hailo-10H and the Azure Kinect on device; they are
+            not part of that pytest count. This page does not claim a coverage
+            percentage or a CI result.
+          </p>
+          <ul class="counts" aria-label="Test inventory">
+            <li><strong>40</strong><span>pytest modules</span></li>
+            <li><strong>314</strong><span>test functions</span></li>
+            <li><strong>v0.4–v1.0</strong><span>documented releases</span></li>
+          </ul>
+        </article>
+
+        <article class="panel" style="margin-top:0.85rem">
+          <h3>Release history</h3>
+          <p>
+            From the README roadmap and CHANGELOG. The status badge on the README
+            is v1.0.0. The changelog’s latest detailed notes are v0.10.0. The
+            README still leaves auth, install and deploy polish, and production
+            ops runbooks unchecked.
+          </p>
+          <ol class="timeline">
+            <li>
+              <span class="ver">v0.4.x</span>
+              <div>
+                <strong>Entity memory and timeline foundation</strong>
+                <p>Durable entities and the historical activity API.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v0.5.x</span>
+              <div>
+                <strong>Live Activity Console and activity stream</strong>
+                <p>Zero-build browser UI, plus LISTEN/NOTIFY and WebSocket delivery.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v0.6.0</span>
+              <div>
+                <strong>Spatial intelligence</strong>
+                <p>Camera zones, dwell sessions, and occupancy.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v0.8.0</span>
+              <div>
+                <strong>Durable alerts</strong>
+                <p>Rules, consumer checkpoints, and the due reconciler.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v0.9.0</span>
+              <div>
+                <strong>Outbound webhooks</strong>
+                <p>Transactional outbox and SSRF-safe delivery.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v0.10.0</span>
+              <div>
+                <strong>Operational observability and data lifecycle</strong>
+                <p>Ops status, bounded metrics, and guarded retention. Latest changelog entry.</p>
+              </div>
+            </li>
+            <li>
+              <span class="ver">v1.0.0</span>
+              <div>
+                <strong>README status</strong>
+                <p>The repository presents the platform above as v1.0.0. Hardening, install polish, and ops runbooks are still listed as follow-on work.</p>
+              </div>
+            </li>
+          </ol>
+        </article>
+      </div>
+    </section>
+
+    <section class="console-section" id="console" aria-labelledby="console-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">Live Activity Console</p>
+          <h2 id="console-title">The operator UI, without a build step</h2>
+          <p>
+            The repository has no product screenshots. This is a static mock
+            styled after <span class="mono">console/index.html</span> and
+            <span class="mono">console/css/console.css</span>. Every value inside
+            the frame is sample data.
+          </p>
+        </div>
+
+        <p class="sample-banner">
+          <strong>Sample data</strong>
+          <span>Not a live capture. Controls are not wired. The real console is served at <span class="mono">/console</span> by the API.</span>
+        </p>
+
+        <div class="browser">
+          <div class="browser-bar">
+            <div class="dots" aria-hidden="true"><i></i><i></i><i></i></div>
+            <span class="url">127.0.0.1:8080/console</span>
+          </div>
+          <div class="console-mock" aria-label="Sample Live Activity Console">
+            <div class="cm-top">
+              <div>
+                <h3>Jarvis Live Activity</h3>
+                <p>v0.10.0 console · ops + retention + notifications + alerts + spatial</p>
+              </div>
+              <ul class="cm-status">
+                <li class="tone-ok"><span>WebSocket</span> <b>connected</b></li>
+                <li class="tone-ok"><span>Stream</span> <b>ready</b></li>
+                <li><span>Last event</span> <b>sample</b></li>
+                <li><span>Reconnect</span> <b>idle · 0</b></li>
+                <li><span>Observations</span> <b>off</b></li>
+                <li class="tone-live"><span>Mode</span> <b>live</b></li>
+                <li><span>Open alerts</span> <b>1</b></li>
+                <li class="tone-ok"><span>Ops</span> <b>healthy</b></li>
+              </ul>
+            </div>
+            <div class="cm-layout">
+              <div class="cm-side">
+                <h4>Operations</h4>
+                <p class="ops-line">Overall: <span class="pill ok">healthy</span> · Ready: <span class="pill ok">ready</span></p>
+                <ul class="cm-components">
+                  <li>database <span class="pill ok">healthy</span></li>
+                  <li>timeline <span class="pill ok">healthy</span></li>
+                  <li>activity listener <span class="pill ok">healthy</span></li>
+                  <li>alert consumer <span class="pill ok">healthy</span></li>
+                  <li>due reconciler <span class="pill ok">healthy</span></li>
+                  <li>notification worker <span class="pill ok">healthy</span></li>
+                  <li>retention worker <span class="pill off">disabled</span></li>
+                </ul>
+                <p class="cm-kicker">Retention policy</p>
+                <ul class="cm-components">
+                  <li>enabled <span class="pill off">false</span></li>
+                  <li>dry-run <span class="pill ok">true</span></li>
+                  <li>manual destructive <span class="pill off">false</span></li>
+                </ul>
+                <p class="cm-kicker">Filters</p>
+                <ul class="checks">
+                  <li>☑ entity_created</li>
+                  <li>☑ entity_closed</li>
+                  <li>☑ zone_entered / zone_exited</li>
+                  <li>☑ alert_triggered / alert_resolved</li>
+                  <li>☐ observation_recorded (opt-in)</li>
+                </ul>
+              </div>
+              <div class="cm-feed">
+                <div class="feed-tools">
+                  <h4>Activity feed</h4>
+                  <span>4 sample events <span class="fake-btn">Load older</span></span>
+                </div>
+                <ul class="cm-events">
+                  <li aria-current="true">
+                    <span class="etype created">entity_created</span>
+                    <div>
+                      <p>person · sample-lobby-camera</p>
+                      <small>camera azure_kinect · sample id</small>
+                    </div>
+                    <span class="src live">live</span>
+                  </li>
+                  <li>
+                    <span class="etype entered">zone_entered</span>
+                    <div>
+                      <p>zone Lobby · dwell opened</p>
+                      <small>normalised box · sample session</small>
+                    </div>
+                    <span class="src live">live</span>
+                  </li>
+                  <li>
+                    <span class="etype alert">alert_triggered</span>
+                    <div>
+                      <p>warning · person entered Lobby</p>
+                      <small>rule event_match · sample alert</small>
+                    </div>
+                    <span class="src recovered">recovered</span>
+                  </li>
+                  <li>
+                    <span class="etype closed">entity_closed</span>
+                    <div>
+                      <p>person closed</p>
+                      <small>historical page · sample cursor</small>
+                    </div>
+                    <span class="src historical">historical</span>
+                  </li>
+                </ul>
+              </div>
+              <div class="cm-side">
+                <h4>Entities</h4>
+                <p class="cm-kicker">Active</p>
+                <ul class="cm-entities">
+                  <li>person <span class="entity-meta">sample · active</span></li>
+                </ul>
+                <dl class="dl">
+                  <dt>Type</dt><dd>person</dd>
+                  <dt>Status</dt><dd>active</dd>
+                  <dt>Camera</dt><dd>azure_kinect</dd>
+                  <dt>Label</dt><dd>sample-person</dd>
+                </dl>
+                <p class="cm-kicker">Zones</p>
+                <div class="zone-row"><span>Lobby</span><span class="pill ok">occupancy 1</span></div>
+                <p class="cm-kicker">Alert deliveries</p>
+                <div class="delivery-row"><span>sample-hook</span><span class="pill ok">delivered</span></div>
+                <p class="entity-meta">https://example.com/hooks/jarvis</p>
+                <p style="margin:0.7rem 0 0">
+                  <span class="fake-btn accent">Run dry-run</span>
+                  <span class="fake-btn is-disabled">Run cleanup</span>
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+        <p class="note" style="margin-top:0.8rem">
+          Real console behaviour, including reconnect recovery and the Operations
+          panel, is described in
+          <a href="https://github.com/mikeybrotha1/jarvis-edge-ai/blob/main/docs/live-activity-console.md">docs/live-activity-console.md</a>.
+        </p>
+      </div>
+    </section>
+
+    <section id="roadmap" aria-labelledby="roadmap-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">Future · not shipped</p>
+          <h2 id="roadmap-title">Roadmap</h2>
+          <p>
+            These items are still open in the README. They are not features of
+            the current tree.
+          </p>
+        </div>
+        <div class="roadmap">
+          <article class="panel">
+            <h3>Still listed under v1.0.0 follow-on</h3>
+            <ul>
+              <li>Authentication and hardening</li>
+              <li>Install and deploy polish</li>
+              <li>Production operations runbooks</li>
+            </ul>
+          </article>
+          <article class="panel future">
+            <h3>Longer-term</h3>
+            <ul>
+              <li>Deeper home, Tesla, and Seedo integrations</li>
+              <li>Local LLM assistant workflows</li>
+              <li>Voice interaction</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="about" aria-labelledby="about-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">Builder</p>
+          <h2 id="about-title">Michael Inzinna</h2>
+        </div>
+        <div class="about-grid">
+          <article class="panel">
+            <p>
+              ERP Analyst on a Lawson-to-Workday conversion at the Archdiocese of
+              New York. He has taken ERP cutovers across Lawson/Infor, Dynamics 365,
+              and Business Central, and builds Python, SQL, and Power BI tooling
+              for that work.
+            </p>
+            <p>
+              Jarvis is the edge-AI system he builds on his own time: a Raspberry
+              Pi 5, a Hailo accelerator, PostgreSQL, and an API that can be
+              operated without the camera attached.
+            </p>
+          </article>
+          <aside class="panel">
+            <h3>Contact</h3>
+            <ul class="contact">
+              <li><a href="mailto:m.inzinna.24@gmail.com">m.inzinna.24@gmail.com</a></li>
+              <li><a href="https://www.linkedin.com/in/michael-inzinna-098431108">LinkedIn</a></li>
+              <li><a href="https://github.com/mikeybrotha1">github.com/mikeybrotha1</a></li>
+              <li><a href="https://github.com/mikeybrotha1/jarvis-edge-ai">jarvis-edge-ai repository</a></li>
+            </ul>
+          </aside>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="wrap">
+      <span>Jarvis Edge AI · Michael Inzinna · 2026</span>
+      <a href="https://github.com/mikeybrotha1/jarvis-edge-ai">Source</a>
+    </div>
+  </footer>
+  <script src="./js/site.js"></script>
+</body>
+</html>
