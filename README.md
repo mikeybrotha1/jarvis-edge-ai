@@ -13,9 +13,9 @@ outbound webhooks, and operational data lifecycle controls.
 A static portfolio page lives in [`site/`](site/) and is published by
 [`.github/workflows/pages.yml`](.github/workflows/pages.yml).
 
-**Live URL (after Pages is enabled):** <https://mikeybrotha1.github.io/jarvis-edge-ai/>
+**Live:** <https://mikeybrotha1.github.io/jarvis-edge-ai/>
 
-Enable it under **Settings → Pages → Source: GitHub Actions**. Steps:
+Pages is published from GitHub Actions. Setup notes:
 [docs/github-pages.md](docs/github-pages.md).
 
 ## What works today (v1.0.0)
