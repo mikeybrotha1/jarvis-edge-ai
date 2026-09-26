@@ -8,6 +8,16 @@ Edge-AI platform for Raspberry Pi 5 with optional Hailo acceleration, durable
 entity memory on PostgreSQL, REST/timeline APIs, spatial zones, durable alerts,
 outbound webhooks, and operational data lifecycle controls.
 
+## Showcase
+
+A static portfolio page lives in [`site/`](site/) and is published by
+[`.github/workflows/pages.yml`](.github/workflows/pages.yml).
+
+**Live URL (after Pages is enabled):** <https://mikeybrotha1.github.io/jarvis-edge-ai/>
+
+Enable it under **Settings → Pages → Source: GitHub Actions**. Steps:
+[docs/github-pages.md](docs/github-pages.md).
+
 ## What works today (v1.0.0)
 
 | Area | Capability |
@@ -71,6 +81,7 @@ Retention and ops defaults are safe:
 | [docs/outbound-notifications.md](docs/outbound-notifications.md) | Webhooks |
 | [docs/spatial-intelligence.md](docs/spatial-intelligence.md) | Zones / sessions |
 | [CHANGELOG.md](CHANGELOG.md) | Release notes |
+| [docs/github-pages.md](docs/github-pages.md) | Enable the showcase on GitHub Pages |
 
 ## Ops & retention tooling
 
