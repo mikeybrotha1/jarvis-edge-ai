@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://mikeybrotha1.github.io/jarvis-edge-ai/sitemap.xml
