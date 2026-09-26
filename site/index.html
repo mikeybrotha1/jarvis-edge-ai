@@ -74,6 +74,7 @@
     <nav id="site-nav" class="site-nav" aria-label="On this page">
       <ul>
         <li><a href="#works">What works</a></li>
+        <li><a href="#hardware">Hardware</a></li>
         <li><a href="#architecture">Architecture</a></li>
         <li><a href="#engineering">Engineering</a></li>
         <li><a href="#console">Console</a></li>
@@ -225,6 +226,73 @@
               Console is zero-build HTML, CSS, and vanilla JS.
             </p>
           </article>
+        </div>
+      </div>
+    </section>
+
+    <section id="hardware" aria-labelledby="hardware-title">
+      <div class="wrap">
+        <div class="section-head">
+          <p class="kicker">On the desk</p>
+          <h2 id="hardware-title">Running on real hardware</h2>
+          <p>
+            Photographs of the Raspberry Pi 5, Hailo-10H, and Azure Kinect
+            cameras this repository is built for. The monitor is the entity
+            query API answering a health check and an entity query.
+          </p>
+        </div>
+        <div class="hardware-grid">
+          <figure class="hardware-shot">
+            <picture>
+              <source
+                type="image/webp"
+                srcset="./img/jarvis-setup-640.webp 640w, ./img/jarvis-setup-960.webp 960w, ./img/jarvis-setup-1200.webp 1200w"
+                sizes="(max-width: 980px) calc(100vw - 1.5rem), 700px"
+              />
+              <img
+                src="./img/jarvis-setup-960.jpg"
+                srcset="./img/jarvis-setup-640.jpg 640w, ./img/jarvis-setup-960.jpg 960w, ./img/jarvis-setup-1200.jpg 1200w"
+                sizes="(max-width: 980px) calc(100vw - 1.5rem), 700px"
+                width="1200"
+                height="1600"
+                alt="Desk with two Azure Kinect cameras on a PC tower, a third Azure Kinect on the desk, a Raspberry Pi 5 with a heatsink, and a monitor showing Jarvis API terminals."
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+            <figcaption>
+              Two Azure Kinect cameras are mounted on the tower, and a third
+              sits on the desk. In front is a Raspberry Pi 5 with a Hailo-10H
+              board and heatsink. On the monitor, the API has started:
+              <span class="mono">GET /health</span> returns HTTP 200, and
+              <span class="mono">GET /api/v1/entities?limit=1</span> returns
+              an active person entity.
+            </figcaption>
+          </figure>
+          <figure class="hardware-shot">
+            <picture>
+              <source
+                type="image/webp"
+                srcset="./img/jarvis-pi5-480.webp 480w, ./img/jarvis-pi5-720.webp 720w, ./img/jarvis-pi5-900.webp 900w"
+                sizes="(max-width: 980px) calc(100vw - 1.5rem), 440px"
+              />
+              <img
+                src="./img/jarvis-pi5-720.jpg"
+                srcset="./img/jarvis-pi5-480.jpg 480w, ./img/jarvis-pi5-720.jpg 720w, ./img/jarvis-pi5-900.jpg 900w"
+                sizes="(max-width: 980px) calc(100vw - 1.5rem), 440px"
+                width="900"
+                height="1220"
+                alt="Close-up of a Raspberry Pi 5 with a black heatsink and connected cables, with an Azure Kinect on the shelf above."
+                loading="lazy"
+                decoding="async"
+              />
+            </picture>
+            <figcaption>
+              Raspberry Pi 5 with the Hailo-10H under the black heatsink, USB
+              and HDMI connected. An Azure Kinect sits on the shelf above the
+              board.
+            </figcaption>
+          </figure>
         </div>
       </div>
     </section>
@@ -475,10 +543,13 @@ ops.retention.allow_manual_destructive_run: false
           <p class="kicker">Live Activity Console</p>
           <h2 id="console-title">The operator UI, without a build step</h2>
           <p>
-            The repository has no product screenshots. This is a static mock
-            styled after <span class="mono">console/index.html</span> and
+            The Live Activity Console is not in the photographs. This is a static
+            mock styled after <span class="mono">console/index.html</span> and
             <span class="mono">console/css/console.css</span>. Every value inside
-            the frame is sample data.
+            the frame is sample data. The photos in
+            <a href="#hardware">Running on real hardware</a> show the system
+            running: the Raspberry Pi 5, the Hailo board, the Azure Kinect
+            cameras, and a terminal where the API answers health and entity queries.
           </p>
         </div>
 
